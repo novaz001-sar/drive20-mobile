@@ -17,6 +17,9 @@ let waypointsGroup, highlightFloorsGroup;
 let minimap, minimapCtx;
 // NEW: Minimap rotation mode (v10.1)
 let minimapBgCanvas, minimapBgCtx;
+let minimapBgDirty = true;
+let lastMinimapRenderKey = '';
+let activeLampLights = [];
 let minimapOrientationMode = 'NORTH_UP'; // 'NORTH_UP' | 'HEADING_UP'
 try {
     const savedMinimapMode = localStorage.getItem('minimap_orientation_mode_v1');
@@ -78,6 +81,15 @@ let textureScales = { floor: 1, wall: 1 };
 // 初始化函数 (Initialization)
 // ====================================================================
 
+function prefersMobilePerformance() {
+    return window.matchMedia('(pointer: coarse)').matches || window.innerWidth <= 900;
+}
+
+function getRendererPixelRatio() {
+    const deviceRatio = window.devicePixelRatio || 1;
+    return Math.min(deviceRatio, prefersMobilePerformance() ? 1.25 : 1.75);
+}
+
 async function init() {
     scene = new THREE.Scene();
     
@@ -88,9 +100,12 @@ function setupSkyBackground() {
     setupSkyBackground();
     scene.fog = new THREE.Fog(0xe6edf2, TILE_SIZE * 12, TILE_SIZE * 36);
     camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 2000);
-    renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer = new THREE.WebGLRenderer({
+        antialias: !prefersMobilePerformance(),
+        powerPreference: 'high-performance'
+    });
+    renderer.setPixelRatio(getRendererPixelRatio());
     renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.setPixelRatio(window.devicePixelRatio);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.04;
@@ -238,6 +253,7 @@ function startDrivingFromBigMap() {
     if (!minimapContainer.classList.contains('big-map') || gameState !== 'BIG_MAP') return;
 
     document.getElementById('big-map-view-modal').style.display = 'none';
+    document.getElementById('view-toggle-container').style.display = 'none';
     document.body.appendChild(minimapContainer);
     minimapContainer.classList.remove('big-map');
     minimapContainer.classList.add('small-map');
@@ -284,6 +300,7 @@ function syncMobileDriveControls() {
 
     const visible = ['AT_INTERSECTION', 'DRIVING', 'TURNING'].includes(gameState);
     controls.classList.toggle('visible', visible);
+    document.body.classList.toggle('driving-compact-ui', visible);
     controls.querySelectorAll('[data-action]').forEach(button => {
         const action = button.dataset.action;
         button.disabled = visible && action !== 'pause' && gameState !== 'AT_INTERSECTION';
@@ -583,6 +600,9 @@ function showMainMenu() {
     [mazeGroup, landmarksGroup, sceneryGroup, waypointsGroup, highlightFloorsGroup].forEach(group => {
         while(group.children.length > 0){ group.remove(group.children[0]); }
     });
+    activeLampLights = [];
+    minimapBgDirty = true;
+    lastMinimapRenderKey = '';
     if(goalMarker) {
         scene.remove(goalMarker);
         goalMarker = null;
@@ -627,6 +647,9 @@ function loadLevel(levelData) {
     [mazeGroup, landmarksGroup, sceneryGroup, waypointsGroup, highlightFloorsGroup].forEach(group => {
         while(group.children.length > 0){ group.remove(group.children[0]); }
     });
+    activeLampLights = [];
+    minimapBgDirty = true;
+    lastMinimapRenderKey = '';
     if(goalMarker) {
         scene.remove(goalMarker);
         goalMarker = null;
@@ -755,8 +778,10 @@ function afterMoveChecks() {
                 
                 currentLevelState.nextWaypoint++;
                 updateMinimapOrientationButton();
-    updateHUD();
+                updateHUD();
                 // Explicitly update the minimap to guarantee the star appears.
+                minimapBgDirty = true;
+                lastMinimapRenderKey = '';
                 updateMinimapPlayer(); 
             }
         }
@@ -772,6 +797,8 @@ function afterMoveChecks() {
                 floorMesh.material.color.set(0x007bff); // Blue
             }
             currentLevelState.touchedHighlightFloors.add(floorKey);
+            minimapBgDirty = true;
+            lastMinimapRenderKey = '';
         }
     }
 
@@ -930,10 +957,7 @@ function animate() {
     dirLight.intensity = dayNightCycle * 0.95 + 1.25;
 
     const nightIntensity = Math.max(0, 1 - dayNightCycle * 3);
-    sceneryGroup.children.forEach(sceneryObject => {
-        const light = sceneryObject.getObjectByName('lampLight');
-        if (light) light.intensity = nightIntensity * 5.5;
-    });
+    activeLampLights.forEach(light => { light.intensity = nightIntensity * 5.5; });
 
     // Object animations (Lucky Cat, Heart, Waypoints)
     if (goalMarker && luckyCatArm) {
@@ -1052,6 +1076,7 @@ function animate() {
 function onWindowResize() {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
+    renderer.setPixelRatio(getRendererPixelRatio());
     renderer.setSize(window.innerWidth, window.innerHeight);
 }
 
@@ -1173,6 +1198,22 @@ function createPlayerCarModel() {
     return carGroup;
 }
 
+function createInstancedWallBatch(geometry, material, transforms) {
+    if (transforms.length === 0) return;
+    const batch = new THREE.InstancedMesh(geometry, material, transforms.length);
+    batch.instanceMatrix.setUsage(THREE.StaticDrawUsage);
+    const dummy = new THREE.Object3D();
+    transforms.forEach((transform, index) => {
+        dummy.position.set(transform.x, WALL_HEIGHT / 2, transform.z);
+        dummy.rotation.set(0, transform.rotationY, 0);
+        dummy.updateMatrix();
+        batch.setMatrixAt(index, dummy.matrix);
+    });
+    batch.instanceMatrix.needsUpdate = true;
+    batch.frustumCulled = false;
+    mazeGroup.add(batch);
+}
+
 function createMazeMesh(grid, goal) {
     const gridWidth = grid[0].length;
     const gridHeight = grid.length;
@@ -1183,6 +1224,17 @@ function createMazeMesh(grid, goal) {
     updateTextureScales();
 
     const wallGeo = new THREE.PlaneGeometry(TILE_SIZE, WALL_HEIGHT);
+    const wallBatches = {
+        north: [],
+        south: [],
+        east: [],
+        west: [],
+        goal: []
+    };
+    const addWall = (batchName, x, z, rotationY) => {
+        wallBatches[batchName].push({ x, z, rotationY });
+    };
+
     for (let z = 0; z < gridHeight; z++) {
         for (let x = 0; x < gridWidth; x++) {
             if (grid[z][x] === 1) {
@@ -1191,34 +1243,29 @@ function createMazeMesh(grid, goal) {
                 
                 // South-facing wall (of cell z-1)
                 if (z > 0 && grid[z - 1][x] === 0) {
-                     const wall = new THREE.Mesh(wallGeo, isNearGoal && z - 1 === goal.z ? goalWallMaterial : wallMaterialS);
-                     wall.position.set(worldPos.x, WALL_HEIGHT / 2, worldPos.z - TILE_SIZE / 2);
-                     mazeGroup.add(wall);
+                     addWall(isNearGoal && z - 1 === goal.z ? 'goal' : 'south', worldPos.x, worldPos.z - TILE_SIZE / 2, 0);
                 }
                 // North-facing wall (of cell z+1)
                 if (z < gridHeight - 1 && grid[z + 1][x] === 0) {
-                     const wall = new THREE.Mesh(wallGeo, isNearGoal && z + 1 === goal.z ? goalWallMaterial : wallMaterialN);
-                     wall.position.set(worldPos.x, WALL_HEIGHT / 2, worldPos.z + TILE_SIZE / 2);
-                     wall.rotation.y = Math.PI;
-                     mazeGroup.add(wall);
+                     addWall(isNearGoal && z + 1 === goal.z ? 'goal' : 'north', worldPos.x, worldPos.z + TILE_SIZE / 2, Math.PI);
                 }
                 // West-facing wall (of cell x-1)
                 if (x > 0 && grid[z][x - 1] === 0) {
-                     const wall = new THREE.Mesh(wallGeo, isNearGoal && x - 1 === goal.x ? goalWallMaterial : wallMaterialW);
-                     wall.position.set(worldPos.x - TILE_SIZE / 2, WALL_HEIGHT / 2, worldPos.z);
-                     wall.rotation.y = Math.PI / 2;
-                     mazeGroup.add(wall);
+                     addWall(isNearGoal && x - 1 === goal.x ? 'goal' : 'west', worldPos.x - TILE_SIZE / 2, worldPos.z, Math.PI / 2);
                 }
                 // East-facing wall (of cell x+1)
                 if (x < gridWidth - 1 && grid[z][x + 1] === 0) {
-                     const wall = new THREE.Mesh(wallGeo, isNearGoal && x + 1 === goal.x ? goalWallMaterial : wallMaterialE);
-                     wall.position.set(worldPos.x + TILE_SIZE / 2, WALL_HEIGHT / 2, worldPos.z);
-                     wall.rotation.y = -Math.PI / 2;
-                     mazeGroup.add(wall);
+                     addWall(isNearGoal && x + 1 === goal.x ? 'goal' : 'east', worldPos.x + TILE_SIZE / 2, worldPos.z, -Math.PI / 2);
                 }
             }
         }
     }
+
+    createInstancedWallBatch(wallGeo, wallMaterialN, wallBatches.north);
+    createInstancedWallBatch(wallGeo, wallMaterialS, wallBatches.south);
+    createInstancedWallBatch(wallGeo, wallMaterialE, wallBatches.east);
+    createInstancedWallBatch(wallGeo, wallMaterialW, wallBatches.west);
+    createInstancedWallBatch(wallGeo, goalWallMaterial, wallBatches.goal);
 }
 
 function createLuckyCat() {
@@ -1562,10 +1609,20 @@ function addSceneryObject(object, x, y, z, rotationY = 0) {
     object.position.set(x, y, z);
     object.rotation.y = rotationY;
     sceneryGroup.add(object);
+    const light = object.getObjectByName('lampLight');
+    if (light) activeLampLights.push(light);
 }
 
 function placeRoadsideObjects(grid) {
     const gridHeight = grid.length; const gridWidth = grid[0].length;
+    const cellCount = gridWidth * gridHeight;
+    const pathCells = grid.reduce((total, row) => total + row.filter(cell => cell === 1).length, 0);
+    const maxDecorations = cellCount > 900 ? 28 : cellCount > 500 ? 44 : 72;
+    const maxLamps = cellCount > 900 ? 8 : cellCount > 500 ? 14 : 24;
+    const spacing = cellCount > 900 ? 11 : cellCount > 500 ? 8 : 5;
+    const shouldDecorate = pathCells > 0;
+    let decorationCount = 0;
+    let lampCount = 0;
     const directionColors = {
         north: 0x0e8f92,
         south: 0x3f5fa8,
@@ -1575,27 +1632,41 @@ function placeRoadsideObjects(grid) {
     for (let z = 0; z < gridHeight; z++) {
         for (let x = 0; x < gridWidth; x++) {
             if (grid[z][x] === 0) continue;
+            if (!shouldDecorate || decorationCount >= maxDecorations) continue;
             const worldPos = gridToWorld(x, z, grid);
             const seed = x * 13 + z * 17;
-            if (z > 0 && grid[z-1][x]===0 && x%3===0) {
+            const preferLamp = lampCount < maxLamps && seed % spacing === 0;
+            const preferBollard = seed % Math.max(3, spacing - 2) === 0;
+            if (z > 0 && grid[z-1][x]===0 && preferLamp) {
                 addSceneryObject(createClassicalLamp(), worldPos.x, 0, worldPos.z - TILE_SIZE * 0.45, 0);
-            } else if (z > 0 && grid[z-1][x]===0 && seed%5===0) {
+                lampCount++; decorationCount++;
+            } else if (z > 0 && grid[z-1][x]===0 && preferBollard) {
                 addSceneryObject(createMetalBollard(directionColors.north), worldPos.x, 0, worldPos.z - TILE_SIZE * 0.42, 0);
+                decorationCount++;
             }
-            if (z < gridHeight-1 && grid[z+1][x]===0 && x%3===1) {
+            if (decorationCount >= maxDecorations) continue;
+            if (z < gridHeight-1 && grid[z+1][x]===0 && preferLamp && seed % 2 === 0) {
                 addSceneryObject(createClassicalLamp(), worldPos.x, 0, worldPos.z + TILE_SIZE * 0.45, Math.PI);
-            } else if (z < gridHeight-1 && grid[z+1][x]===0 && seed%7===0) {
+                lampCount++; decorationCount++;
+            } else if (z < gridHeight-1 && grid[z+1][x]===0 && preferBollard && seed%7===0) {
                 addSceneryObject(createMetalBollard(directionColors.south), worldPos.x, 0, worldPos.z + TILE_SIZE * 0.42, Math.PI);
+                decorationCount++;
             }
-            if (x > 0 && grid[z][x-1]===0 && z%3===0) {
+            if (decorationCount >= maxDecorations) continue;
+            if (x > 0 && grid[z][x-1]===0 && preferLamp && seed % 3 === 0) {
                 addSceneryObject(createClassicalLamp(), worldPos.x - TILE_SIZE * 0.45, 0, worldPos.z, Math.PI/2);
-            } else if (x > 0 && grid[z][x-1]===0 && seed%6===0) {
+                lampCount++; decorationCount++;
+            } else if (x > 0 && grid[z][x-1]===0 && preferBollard && seed%6===0) {
                 addSceneryObject(createMetalBollard(directionColors.west), worldPos.x - TILE_SIZE * 0.42, 0, worldPos.z, Math.PI/2);
+                decorationCount++;
             }
-            if (x < gridWidth-1 && grid[z][x+1]===0 && z%3===1) {
+            if (decorationCount >= maxDecorations) continue;
+            if (x < gridWidth-1 && grid[z][x+1]===0 && preferLamp && seed % 5 === 0) {
                 addSceneryObject(createClassicalLamp(), worldPos.x + TILE_SIZE * 0.45, 0, worldPos.z, -Math.PI/2);
-            } else if (x < gridWidth-1 && grid[z][x+1]===0 && seed%8===0) {
+                lampCount++; decorationCount++;
+            } else if (x < gridWidth-1 && grid[z][x+1]===0 && preferBollard && seed%8===0) {
                 addSceneryObject(createMetalBollard(directionColors.east), worldPos.x + TILE_SIZE * 0.42, 0, worldPos.z, -Math.PI/2);
+                decorationCount++;
             }
         }
     }
@@ -1804,9 +1875,30 @@ function drawMinimapPlayerArrow(ctx, playerX, playerZ, rotationRad, cellWidth, c
     ctx.restore();
 }
 
+function ensureMinimapBackground(level) {
+    if (!minimapBgCanvas || !minimapBgCtx) return false;
+    if (minimapBgDirty || minimapBgCanvas.width !== 500 || minimapBgCanvas.height !== 500) {
+        drawMinimapBackground(
+            minimapBgCtx,
+            minimapBgCanvas,
+            level.grid,
+            level.start,
+            level.goal,
+            level.waypoints,
+            level.highlightFloors,
+            currentLevelState.nextWaypoint,
+            currentLevelState.touchedHighlightFloors
+        );
+        minimapBgDirty = false;
+    }
+    return true;
+}
+
 function updateMinimapPlayer() {
     const level = (currentLevelIndex === -1) ? customLevels[selectedCustomMapIndex] : levels[currentLevelIndex];
     if (!level || !level.grid) return;
+    const minimapContainer = document.getElementById('minimap-container');
+    if (minimapContainer && getComputedStyle(minimapContainer).display === 'none') return;
 
     const { grid, start, goal, waypoints, highlightFloors } = level;
 
@@ -1818,32 +1910,49 @@ function updateMinimapPlayer() {
     const headingAngle = Math.atan2(dirVec.z, dirVec.x);
 
     // Canvas sizing
-    minimap.width = 500;
-    minimap.height = 500;
+    if (minimap.width !== 500) minimap.width = 500;
+    if (minimap.height !== 500) minimap.height = 500;
 
     const ctx = minimapCtx;
     const cellWidth = ctx.canvas.width / grid[0].length;
     const cellHeight = ctx.canvas.height / grid.length;
     const playerX = (gridPos.x + 0.5) * cellWidth;
     const playerZ = (gridPos.z + 0.5) * cellHeight;
+    const renderKey = [
+        currentLevelIndex,
+        gridPos.x,
+        gridPos.z,
+        player.rotation.y.toFixed(3),
+        minimapOrientationMode,
+        currentLevelState.nextWaypoint,
+        currentLevelState.touchedHighlightFloors.size,
+        minimap.width,
+        minimap.height
+    ].join('|');
+    if (!minimapBgDirty && renderKey === lastMinimapRenderKey) return;
+    const hasCachedBackground = ensureMinimapBackground(level);
 
     if (minimapOrientationMode === 'NORTH_UP') {
         // 1) North-Up (original behavior): map fixed, arrow rotates
-        drawMinimapBackground(ctx, minimap, grid, start, goal, waypoints, highlightFloors, currentLevelState.nextWaypoint, currentLevelState.touchedHighlightFloors);
+        if (hasCachedBackground) {
+            ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+            ctx.drawImage(minimapBgCanvas, 0, 0);
+        } else {
+            drawMinimapBackground(ctx, minimap, grid, start, goal, waypoints, highlightFloors, currentLevelState.nextWaypoint, currentLevelState.touchedHighlightFloors);
+        }
         drawMinimapPlayerArrow(ctx, playerX, playerZ, headingAngle, cellWidth, cellHeight);
+        lastMinimapRenderKey = renderKey;
         return;
     }
 
     // 2) Heading-Up: rotate the whole minimap so the car heading is "up"
-    if (!minimapBgCanvas || !minimapBgCtx) {
+    if (!hasCachedBackground) {
         // Fallback
         drawMinimapBackground(ctx, minimap, grid, start, goal, waypoints, highlightFloors, currentLevelState.nextWaypoint, currentLevelState.touchedHighlightFloors);
         drawMinimapPlayerArrow(ctx, playerX, playerZ, headingAngle, cellWidth, cellHeight);
+        lastMinimapRenderKey = renderKey;
         return;
     }
-
-    // Draw background to offscreen first
-    drawMinimapBackground(minimapBgCtx, minimapBgCanvas, grid, start, goal, waypoints, highlightFloors, currentLevelState.nextWaypoint, currentLevelState.touchedHighlightFloors);
 
     ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
 
@@ -1862,6 +1971,7 @@ function updateMinimapPlayer() {
 
     // Draw player arrow fixed to "up" at the center of the minimap.
     drawMinimapPlayerArrow(ctx, centerX, centerY, desiredArrowAngle, cellWidth, cellHeight);
+    lastMinimapRenderKey = renderKey;
 }
 
 
