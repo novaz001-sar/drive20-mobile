@@ -7,12 +7,14 @@
     --surface-color: #ffffff;
     --quiet-color: #475569;
     --focus-ring-color: #f59e0b;
-    --wall-color-ns: #bbf7d0; /* soft green walls */
-    --wall-color-ew: #fbcfe8; /* soft pink guide walls */
-    --floor-color: #dff7ec; /* fallback for the patterned floor */
-    --landmark-color: #f59e0b; /* warm landmark glow */
-    --start-color: #2563eb;
-    --goal-color: #ef4444; /* friendly red goal */
+    --wall-color-n: #0e8f92; /* satin teal north walls */
+    --wall-color-s: #3f5fa8; /* satin indigo south walls */
+    --wall-color-e: #c89b3c; /* brass east walls */
+    --wall-color-w: #b35b6a; /* rose-copper west walls */
+    --floor-color: #8f99a8; /* solid brushed-steel floor */
+    --landmark-color: #d6a33d; /* warm metal landmark glow */
+    --start-color: #2f6fbd;
+    --goal-color: #d64a3a; /* polished red goal */
     --font-size-normal: 20px;
     --font-size-large: 25px;
     --font-size-xlarge: 34px;

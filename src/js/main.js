@@ -82,47 +82,18 @@ async function init() {
     scene = new THREE.Scene();
     
 function setupSkyBackground() {
-  const skyCanvas = document.createElement('canvas');
-  skyCanvas.width = 128;
-  skyCanvas.height = 512;
-  const ctx = skyCanvas.getContext('2d');
-  const gradient = ctx.createLinearGradient(0, 0, 0, skyCanvas.height);
-  gradient.addColorStop(0, '#7dd3fc');
-  gradient.addColorStop(0.38, '#bae6fd');
-  gradient.addColorStop(0.72, '#dcfce7');
-  gradient.addColorStop(1, '#fef3c7');
-  ctx.fillStyle = gradient;
-  ctx.fillRect(0, 0, skyCanvas.width, skyCanvas.height);
-
-  ctx.fillStyle = 'rgba(255, 214, 102, 0.9)';
-  ctx.beginPath();
-  ctx.arc(96, 86, 22, 0, Math.PI * 2);
-  ctx.fill();
-
-  ctx.fillStyle = 'rgba(14, 116, 144, 0.24)';
-  ctx.beginPath();
-  ctx.moveTo(0, 390);
-  ctx.lineTo(22, 330);
-  ctx.lineTo(48, 380);
-  ctx.lineTo(76, 318);
-  ctx.lineTo(112, 392);
-  ctx.lineTo(128, 360);
-  ctx.lineTo(128, 512);
-  ctx.lineTo(0, 512);
-  ctx.closePath();
-  ctx.fill();
-
-  const texture = new THREE.CanvasTexture(skyCanvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  scene.background = texture;
+  scene.background = new THREE.Color(0xe6edf2);
 }
 
     setupSkyBackground();
-    scene.fog = new THREE.Fog(0xb7e4d8, TILE_SIZE * 10, TILE_SIZE * 34);
+    scene.fog = new THREE.Fog(0xe6edf2, TILE_SIZE * 12, TILE_SIZE * 36);
     camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 2000);
     renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.04;
     document.getElementById('game-container').appendChild(renderer.domElement);
     
     // Initialize clear color based on fog, might be overwritten by setupSkyBackground
@@ -141,15 +112,19 @@ function setupSkyBackground() {
         console.error("Could not load font for 3D text.", error);
     }
 
-    hemisphereLight = new THREE.HemisphereLight(0xffffff, 0x78c6a3, 2.4);
+    hemisphereLight = new THREE.HemisphereLight(0xf8fbff, 0x59616d, 1.9);
     hemisphereLight.position.set(0, 20, 0);
     scene.add(hemisphereLight);
 
-    dirLight = new THREE.DirectionalLight(0xfff1c2, 2.8);
-    dirLight.position.set(-1, 1.75, 1).multiplyScalar(30);
+    dirLight = new THREE.DirectionalLight(0xffffff, 2.35);
+    dirLight.position.set(-0.8, 1.8, 0.9).multiplyScalar(30);
     scene.add(dirLight);
 
-    const softFillLight = new THREE.AmbientLight(0xffffff, 0.35);
+    const rimLight = new THREE.DirectionalLight(0xbfd7ff, 0.85);
+    rimLight.position.set(1.4, 1.2, -0.9).multiplyScalar(24);
+    scene.add(rimLight);
+
+    const softFillLight = new THREE.AmbientLight(0xffffff, 0.22);
     scene.add(softFillLight);
 
     player = new THREE.Object3D();
@@ -940,9 +915,9 @@ function animate() {
     
     // Day/Night Cycle (Visuals update)
     const dayNightCycle = (Math.sin(elapsedTime * (0.1 / 3)) + 1) / 2;
-    const skyDay = new THREE.Color(0x87ceeb);
-    const skyNight = new THREE.Color(0x210033); 
-    const visualColor = skyNight.clone().lerp(skyDay, dayNightCycle);
+    const skyDay = new THREE.Color(0xe6edf2);
+    const skyNight = new THREE.Color(0x8f9baa);
+    const visualColor = skyNight.clone().lerp(skyDay, 0.58 + dayNightCycle * 0.42);
 
     if (scene.fog) scene.fog.color.copy(visualColor);
     // Only update background color if a texture isn't used
@@ -951,13 +926,13 @@ function animate() {
          renderer.setClearColor(visualColor, 1);
     }
 
-    hemisphereLight.intensity = dayNightCycle * 2.0 + 0.4;
-    dirLight.intensity = dayNightCycle * 2.5 + 0.3;
+    hemisphereLight.intensity = dayNightCycle * 0.65 + 1.25;
+    dirLight.intensity = dayNightCycle * 0.95 + 1.25;
 
     const nightIntensity = Math.max(0, 1 - dayNightCycle * 3);
     sceneryGroup.children.forEach(sceneryObject => {
         const light = sceneryObject.getObjectByName('lampLight');
-        if (light) light.intensity = nightIntensity * 8;
+        if (light) light.intensity = nightIntensity * 5.5;
     });
 
     // Object animations (Lucky Cat, Heart, Waypoints)
@@ -1532,53 +1507,54 @@ function createStarField(){
     starField = new THREE.Points(geo, mat); starField.frustumCulled = false; starField.renderOrder = 0;
     scene.add(starField);
 }
+function getCssColor(variableName, fallbackColor) {
+    const value = getComputedStyle(document.body).getPropertyValue(variableName).trim();
+    return new THREE.Color(value || fallbackColor);
+}
+
+function createSatinMetalMaterial(color, options = {}) {
+    return new THREE.MeshPhysicalMaterial({
+        color,
+        metalness: options.metalness ?? 0.46,
+        roughness: options.roughness ?? 0.28,
+        clearcoat: options.clearcoat ?? 0.28,
+        clearcoatRoughness: options.clearcoatRoughness ?? 0.18,
+        emissive: options.emissive ?? 0x000000,
+        emissiveIntensity: options.emissiveIntensity ?? 0,
+        side: options.side ?? THREE.FrontSide
+    });
+}
+
 function createClassicalLamp() {
     const group = new THREE.Group();
-    const postMat = new THREE.MeshStandardMaterial({ color: 0x155e75, roughness: 0.45, metalness: 0.35 });
-    const trimMat = new THREE.MeshStandardMaterial({ color: 0xf59e0b, roughness: 0.35, metalness: 0.25 });
+    const postMat = createSatinMetalMaterial(0x2f3741, { metalness: 0.62, roughness: 0.22, clearcoat: 0.38 });
+    const trimMat = createSatinMetalMaterial(0xb8893a, { metalness: 0.58, roughness: 0.24, clearcoat: 0.32 });
     const base = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.48, 0.22, 10), trimMat);
     base.position.y = 0.11; group.add(base);
     const post = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.11, 3.5, 10), postMat);
     post.position.y = 1.86; group.add(post);
     const holder = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.18, 0.95), postMat);
     holder.position.set(0, 3.58, 0.35); group.add(holder);
-    const lightColors = [0xfff3b0, 0xc7f9ff, 0xffd6e7, 0xd9f99d, 0xfef08a];
-    const randomColor = lightColors[Math.floor(Math.random() * lightColors.length)];
-    const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.44, 12, 8), new THREE.MeshBasicMaterial({ color: randomColor }));
+    const bulbColor = 0xffd98a;
+    const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.4, 12, 8), new THREE.MeshBasicMaterial({ color: bulbColor }));
     bulb.position.set(0, 3.6, 0.35); group.add(bulb);
-    const glow = new THREE.Mesh(new THREE.SphereGeometry(0.68, 12, 8), new THREE.MeshBasicMaterial({ color: randomColor, transparent: true, opacity: 0.18, depthWrite: false }));
+    const glow = new THREE.Mesh(new THREE.SphereGeometry(0.62, 12, 8), new THREE.MeshBasicMaterial({ color: bulbColor, transparent: true, opacity: 0.12, depthWrite: false }));
     glow.position.copy(bulb.position); group.add(glow);
-    const light = new THREE.PointLight(randomColor, 0, TILE_SIZE * 2.4, 1.35);
+    const light = new THREE.PointLight(bulbColor, 0, TILE_SIZE * 2.1, 1.45);
     light.name = 'lampLight'; light.position.copy(bulb.position); group.add(light);
     return group;
 }
 
-function createFlowerMarker(color = 0xf472b6) {
+function createMetalBollard(color = 0x8f99a8) {
     const group = new THREE.Group();
-    const potMat = new THREE.MeshStandardMaterial({ color: 0xb45309, roughness: 0.75, metalness: 0.05 });
-    const leafMat = new THREE.MeshStandardMaterial({ color: 0x16a34a, roughness: 0.7 });
-    const flowerMat = new THREE.MeshStandardMaterial({ color, roughness: 0.45, emissive: color, emissiveIntensity: 0.08 });
-    const pot = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.28, 0.38, 10), potMat);
-    pot.position.y = 0.19; group.add(pot);
-    for (let i = 0; i < 3; i++) {
-        const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.62 + i * 0.08, 6), leafMat);
-        stem.position.set((i - 1) * 0.15, 0.62, 0); group.add(stem);
-        const bloom = new THREE.Mesh(new THREE.SphereGeometry(0.16, 10, 8), flowerMat);
-        bloom.position.set((i - 1) * 0.15, 0.95 + i * 0.08, 0); group.add(bloom);
-    }
-    return group;
-}
-
-function createFriendlySign(color = 0x0f766e) {
-    const group = new THREE.Group();
-    const postMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.5 });
-    const boardMat = new THREE.MeshStandardMaterial({ color, roughness: 0.35, emissive: color, emissiveIntensity: 0.08 });
-    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 1.7, 8), postMat);
-    post.position.y = 0.85; group.add(post);
-    const board = new THREE.Mesh(new THREE.BoxGeometry(1.25, 0.58, 0.12), boardMat);
-    board.position.y = 1.62; group.add(board);
-    const star = new THREE.Mesh(new THREE.TetrahedronGeometry(0.18), new THREE.MeshStandardMaterial({ color: 0xfef08a, emissive: 0xf59e0b, emissiveIntensity: 0.35 }));
-    star.position.set(0, 1.62, 0.09); star.rotation.z = Math.PI / 4; group.add(star);
+    const bodyMat = createSatinMetalMaterial(color, { metalness: 0.54, roughness: 0.26, clearcoat: 0.34 });
+    const capMat = createSatinMetalMaterial(0xd5b46a, { metalness: 0.6, roughness: 0.22, clearcoat: 0.36 });
+    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.2, 0.9, 14), bodyMat);
+    post.position.y = 0.45; group.add(post);
+    const cap = new THREE.Mesh(new THREE.SphereGeometry(0.22, 14, 8), capMat);
+    cap.position.y = 0.94; group.add(cap);
+    const base = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.3, 0.12, 14), capMat);
+    base.position.y = 0.06; group.add(base);
     return group;
 }
 
@@ -1590,8 +1566,12 @@ function addSceneryObject(object, x, y, z, rotationY = 0) {
 
 function placeRoadsideObjects(grid) {
     const gridHeight = grid.length; const gridWidth = grid[0].length;
-    const flowerColors = [0xf472b6, 0x38bdf8, 0xa3e635, 0xfacc15, 0xfb7185];
-    const signColors = [0x0f766e, 0x2563eb, 0xdc2626, 0x7c3aed];
+    const directionColors = {
+        north: 0x0e8f92,
+        south: 0x3f5fa8,
+        east: 0xc89b3c,
+        west: 0xb35b6a
+    };
     for (let z = 0; z < gridHeight; z++) {
         for (let x = 0; x < gridWidth; x++) {
             if (grid[z][x] === 0) continue;
@@ -1600,114 +1580,50 @@ function placeRoadsideObjects(grid) {
             if (z > 0 && grid[z-1][x]===0 && x%3===0) {
                 addSceneryObject(createClassicalLamp(), worldPos.x, 0, worldPos.z - TILE_SIZE * 0.45, 0);
             } else if (z > 0 && grid[z-1][x]===0 && seed%5===0) {
-                addSceneryObject(createFlowerMarker(flowerColors[seed % flowerColors.length]), worldPos.x, 0, worldPos.z - TILE_SIZE * 0.42, 0);
+                addSceneryObject(createMetalBollard(directionColors.north), worldPos.x, 0, worldPos.z - TILE_SIZE * 0.42, 0);
             }
             if (z < gridHeight-1 && grid[z+1][x]===0 && x%3===1) {
                 addSceneryObject(createClassicalLamp(), worldPos.x, 0, worldPos.z + TILE_SIZE * 0.45, Math.PI);
             } else if (z < gridHeight-1 && grid[z+1][x]===0 && seed%7===0) {
-                addSceneryObject(createFriendlySign(signColors[seed % signColors.length]), worldPos.x, 0, worldPos.z + TILE_SIZE * 0.42, Math.PI);
+                addSceneryObject(createMetalBollard(directionColors.south), worldPos.x, 0, worldPos.z + TILE_SIZE * 0.42, Math.PI);
             }
             if (x > 0 && grid[z][x-1]===0 && z%3===0) {
                 addSceneryObject(createClassicalLamp(), worldPos.x - TILE_SIZE * 0.45, 0, worldPos.z, Math.PI/2);
             } else if (x > 0 && grid[z][x-1]===0 && seed%6===0) {
-                addSceneryObject(createFlowerMarker(flowerColors[(seed + 2) % flowerColors.length]), worldPos.x - TILE_SIZE * 0.42, 0, worldPos.z, Math.PI/2);
+                addSceneryObject(createMetalBollard(directionColors.west), worldPos.x - TILE_SIZE * 0.42, 0, worldPos.z, Math.PI/2);
             }
             if (x < gridWidth-1 && grid[z][x+1]===0 && z%3===1) {
                 addSceneryObject(createClassicalLamp(), worldPos.x + TILE_SIZE * 0.45, 0, worldPos.z, -Math.PI/2);
             } else if (x < gridWidth-1 && grid[z][x+1]===0 && seed%8===0) {
-                addSceneryObject(createFriendlySign(signColors[(seed + 1) % signColors.length]), worldPos.x + TILE_SIZE * 0.42, 0, worldPos.z, -Math.PI/2);
+                addSceneryObject(createMetalBollard(directionColors.east), worldPos.x + TILE_SIZE * 0.42, 0, worldPos.z, -Math.PI/2);
             }
         }
     }
 }
 
-function createCanvasTexture(width, height, painter) {
-    const canvas = document.createElement('canvas');
-    canvas.width = width;
-    canvas.height = height;
-    const ctx = canvas.getContext('2d');
-    painter(ctx, width, height);
-    const texture = new THREE.CanvasTexture(canvas);
-    texture.colorSpace = THREE.SRGBColorSpace;
-    texture.wrapS = THREE.RepeatWrapping;
-    texture.wrapT = THREE.RepeatWrapping;
-    return texture;
-}
-
-function createFloorTexture() {
-    return createCanvasTexture(256, 256, (ctx, width, height) => {
-        ctx.fillStyle = '#dff7ec';
-        ctx.fillRect(0, 0, width, height);
-        ctx.fillStyle = '#c7f0de';
-        for (let y = 0; y < height; y += 32) ctx.fillRect(0, y, width, 3);
-        for (let x = 0; x < width; x += 32) ctx.fillRect(x, 0, 3, height);
-        ctx.strokeStyle = 'rgba(15,118,110,0.28)';
-        ctx.lineWidth = 5;
-        ctx.setLineDash([18, 14]);
-        ctx.beginPath();
-        ctx.moveTo(width / 2, 0);
-        ctx.lineTo(width / 2, height);
-        ctx.stroke();
-        ctx.setLineDash([]);
-        ctx.fillStyle = 'rgba(245,158,11,0.16)';
-        ctx.beginPath();
-        ctx.arc(54, 64, 26, 0, Math.PI * 2);
-        ctx.arc(194, 188, 24, 0, Math.PI * 2);
-        ctx.fill();
-    });
-}
-
-function createWallTexture(base, accent) {
-    return createCanvasTexture(128, 128, (ctx, width, height) => {
-        ctx.fillStyle = base;
-        ctx.fillRect(0, 0, width, height);
-        ctx.fillStyle = accent;
-        ctx.fillRect(0, 0, width, 15);
-        ctx.fillRect(0, height - 15, width, 15);
-        ctx.fillStyle = 'rgba(255,255,255,0.24)';
-        for (let x = -24; x < width; x += 42) {
-            ctx.beginPath();
-            ctx.moveTo(x, height);
-            ctx.lineTo(x + 42, 0);
-            ctx.lineTo(x + 56, 0);
-            ctx.lineTo(x + 14, height);
-            ctx.closePath();
-            ctx.fill();
-        }
-        ctx.strokeStyle = 'rgba(17,24,39,0.18)';
-        ctx.lineWidth = 3;
-        ctx.strokeRect(1.5, 1.5, width - 3, height - 3);
-    });
-}
-
 function createMaterials() {
-    const defaultWallColorN = new THREE.Color(getComputedStyle(document.body).getPropertyValue('--wall-color-ns').trim());
-    const defaultWallColorS = new THREE.Color(getComputedStyle(document.body).getPropertyValue('--wall-color-ns').trim());
-    const defaultWallColorE = new THREE.Color(getComputedStyle(document.body).getPropertyValue('--wall-color-ew').trim());
-    const defaultWallColorW = new THREE.Color(getComputedStyle(document.body).getPropertyValue('--wall-color-ew').trim());
+    const wallOptions = { metalness: 0.48, roughness: 0.25, clearcoat: 0.34, clearcoatRoughness: 0.16, side: THREE.DoubleSide };
+    wallMaterialN = createSatinMetalMaterial(getCssColor('--wall-color-n', '#0e8f92'), wallOptions);
+    wallMaterialS = createSatinMetalMaterial(getCssColor('--wall-color-s', '#3f5fa8'), wallOptions);
+    wallMaterialE = createSatinMetalMaterial(getCssColor('--wall-color-e', '#c89b3c'), wallOptions);
+    wallMaterialW = createSatinMetalMaterial(getCssColor('--wall-color-w', '#b35b6a'), wallOptions);
 
-    const northTexture = createWallTexture('#bbf7d0', '#0f766e');
-    const southTexture = createWallTexture('#dbeafe', '#2563eb');
-    const eastTexture = createWallTexture('#fde68a', '#d97706');
-    const westTexture = createWallTexture('#fbcfe8', '#be185d');
-
-    wallMaterialN = new THREE.MeshStandardMaterial({ color: defaultWallColorN, map: northTexture, roughness: 0.55, metalness: 0.05, side: THREE.DoubleSide });
-    wallMaterialS = new THREE.MeshStandardMaterial({ color: defaultWallColorS, map: southTexture, roughness: 0.55, metalness: 0.05, side: THREE.DoubleSide });
-    wallMaterialE = new THREE.MeshStandardMaterial({ color: defaultWallColorE, map: eastTexture, roughness: 0.55, metalness: 0.05, side: THREE.DoubleSide });
-    wallMaterialW = new THREE.MeshStandardMaterial({ color: defaultWallColorW, map: westTexture, roughness: 0.55, metalness: 0.05, side: THREE.DoubleSide });
-
-    const floorTexture = createFloorTexture();
-    floorTexture.repeat.set(8, 8);
-    floorMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff, map: floorTexture, metalness: 0.04, roughness: 0.72 });
+    floorMaterial = createSatinMetalMaterial(getCssColor('--floor-color', '#8f99a8'), {
+        metalness: 0.18,
+        roughness: 0.46,
+        clearcoat: 0.16,
+        clearcoatRoughness: 0.28
+    });
 
     landmarkMaterial = new THREE.MeshBasicMaterial({ color: new THREE.Color(getComputedStyle(document.body).getPropertyValue('--landmark-color').trim()), transparent: true, blending: THREE.AdditiveBlending });
     
-    goalWallMaterial = new THREE.MeshStandardMaterial({
-        color: 0xff8a65,
-        roughness: 0.38,
-        metalness: 0.08,
-        emissive: 0xff3d00,
-        emissiveIntensity: 0.38,
+    goalWallMaterial = createSatinMetalMaterial(0xd64a3a, {
+        roughness: 0.24,
+        metalness: 0.42,
+        clearcoat: 0.35,
+        clearcoatRoughness: 0.16,
+        emissive: 0x3a0906,
+        emissiveIntensity: 0.1,
         side: THREE.DoubleSide
     });
 }
