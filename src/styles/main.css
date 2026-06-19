@@ -7,12 +7,12 @@
     --surface-color: #ffffff;
     --quiet-color: #475569;
     --focus-ring-color: #f59e0b;
-    --wall-color-ns: #f5deb3; /* Wheat - for North-South walls */
-    --wall-color-ew: #ffc0cb; /* light pink */ /* Linen - slightly lighter for East-West walls */
-    --floor-color: #E0E0E0; /* Fallback color, not really used with texture */
-    --landmark-color: #ffc107; /* Amber */
-    --start-color: #007bff;
-    --goal-color: #dc3545; /* Red */
+    --wall-color-ns: #bbf7d0; /* soft green walls */
+    --wall-color-ew: #fbcfe8; /* soft pink guide walls */
+    --floor-color: #dff7ec; /* fallback for the patterned floor */
+    --landmark-color: #f59e0b; /* warm landmark glow */
+    --start-color: #2563eb;
+    --goal-color: #ef4444; /* friendly red goal */
     --font-size-normal: 20px;
     --font-size-large: 25px;
     --font-size-xlarge: 34px;
