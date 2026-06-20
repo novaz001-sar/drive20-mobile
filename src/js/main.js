@@ -79,7 +79,11 @@ let currentLanguage = 'en';
 let promptTimeout;
 let hintTimeout;
 let currentEditorMode = 'custom';
-const DEFAULT_FLOOR_TEXTURE_URL = './src/assets/floor-cell.png?v=20260620-2';
+const DEFAULT_FLOOR_TEXTURE_URL = './src/assets/floor-cell-mobile-512.webp?v=20260620-4';
+const FALLBACK_FLOOR_TEXTURE_URL = './src/assets/floor-cell.png?v=20260620-4';
+let defaultFloorTexturePromise = null;
+
+THREE.Cache.enabled = true;
 
 // Texture customization variables
 let textureURLs = { floor: null, wallN: null, wallS: null, wallE: null, wallW: null };
@@ -93,9 +97,13 @@ function prefersMobilePerformance() {
     return window.matchMedia('(pointer: coarse)').matches || window.innerWidth <= 900;
 }
 
+function isPortraitTouchScreen() {
+    return window.innerWidth <= 800 && window.innerHeight > window.innerWidth;
+}
+
 function getRendererPixelRatio() {
     const deviceRatio = window.devicePixelRatio || 1;
-    return Math.min(deviceRatio, prefersMobilePerformance() ? 1.25 : 1.75);
+    return Math.min(deviceRatio, prefersMobilePerformance() ? 1.55 : 1.85);
 }
 
 function setupSkyBackground() {
@@ -131,8 +139,10 @@ async function init() {
     scene.fog = new THREE.Fog(scene.userData.skyFogColor, TILE_SIZE * 12, TILE_SIZE * 36);
     camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 2000);
     renderer = new THREE.WebGLRenderer({
-        antialias: !prefersMobilePerformance(),
-        powerPreference: 'high-performance'
+        antialias: true,
+        powerPreference: 'high-performance',
+        precision: 'highp',
+        stencil: false
     });
     renderer.setPixelRatio(getRendererPixelRatio());
     renderer.setSize(window.innerWidth, window.innerHeight);
@@ -209,6 +219,7 @@ async function init() {
     minimapBgCanvas = document.createElement('canvas');
     minimapBgCtx = minimapBgCanvas.getContext('2d');
 
+    requestDefaultFloorTexture();
     createMaterials();
     loadCustomLevels();
 
@@ -283,8 +294,8 @@ function startDrivingFromBigMap() {
     if (!minimapContainer.classList.contains('big-map') || gameState !== 'BIG_MAP') return;
 
     document.getElementById('big-map-view-modal').style.display = 'none';
-    document.getElementById('view-toggle-container').style.display = 'none';
-    document.getElementById('third-person-controls').style.display = 'none';
+    document.getElementById('view-toggle-container').style.display = 'flex';
+    document.getElementById('third-person-controls').style.display = viewMode === '3P' ? 'flex' : 'none';
     document.body.appendChild(minimapContainer);
     minimapContainer.classList.remove('big-map');
     minimapContainer.classList.add('small-map');
@@ -330,6 +341,10 @@ function syncMobileDriveControls() {
     if (!controls) return;
 
     const visible = ['AT_INTERSECTION', 'DRIVING', 'TURNING'].includes(gameState);
+    const syncKey = `${visible}:${gameState}`;
+    if (controls.dataset.syncKey === syncKey) return;
+    controls.dataset.syncKey = syncKey;
+
     controls.classList.toggle('visible', visible);
     document.body.classList.toggle('driving-compact-ui', visible);
     controls.querySelectorAll('[data-action]').forEach(button => {
@@ -1203,6 +1218,10 @@ function onWindowResize() {
     camera.updateProjectionMatrix();
     renderer.setPixelRatio(getRendererPixelRatio());
     renderer.setSize(window.innerWidth, window.innerHeight);
+    if (isPortraitTouchScreen()) {
+        const hintEl = document.getElementById('ingame-hint');
+        if (hintEl) hintEl.style.display = 'none';
+    }
 }
 
 // ====================================================================
@@ -1689,29 +1708,47 @@ function configureRepeatingTexture(texture) {
     texture.colorSpace = THREE.SRGBColorSpace;
     texture.wrapS = THREE.RepeatWrapping;
     texture.wrapT = THREE.RepeatWrapping;
-    texture.anisotropy = renderer ? Math.min(4, renderer.capabilities.getMaxAnisotropy()) : 1;
+    texture.anisotropy = renderer ? Math.min(8, renderer.capabilities.getMaxAnisotropy()) : 1;
     return texture;
 }
 
-function loadTextureIntoMaterial(url, material, { onErrorColor = null } = {}) {
+function loadRepeatingTexture(url) {
     const loader = new THREE.TextureLoader();
-    loader.load(
-        url,
-        (texture) => {
+    return new Promise((resolve, reject) => {
+        loader.load(url, (texture) => {
             configureRepeatingTexture(texture);
-            material.map = texture;
-            material.color.set(0xffffff);
-            material.needsUpdate = true;
-            updateTextureScales();
-        },
-        undefined,
-        (error) => {
+            resolve(texture);
+        }, undefined, reject);
+    });
+}
+
+function requestDefaultFloorTexture() {
+    if (!defaultFloorTexturePromise) {
+        defaultFloorTexturePromise = loadRepeatingTexture(DEFAULT_FLOOR_TEXTURE_URL).catch((webpError) => {
+            console.warn(`Texture failed to load: ${DEFAULT_FLOOR_TEXTURE_URL}`, webpError);
+            return loadRepeatingTexture(FALLBACK_FLOOR_TEXTURE_URL);
+        });
+    }
+    return defaultFloorTexturePromise;
+}
+
+function applyTextureToMaterial(texture, material) {
+    material.map = texture;
+    material.color.set(0xffffff);
+    material.needsUpdate = true;
+    updateTextureScales();
+}
+
+function loadTextureIntoMaterial(url, material, { onErrorColor = null, texturePromise = null } = {}) {
+    const pendingTexture = texturePromise || loadRepeatingTexture(url);
+    pendingTexture
+        .then((texture) => applyTextureToMaterial(texture, material))
+        .catch((error) => {
             console.warn(`Texture failed to load: ${url}`, error);
             material.map = null;
             if (onErrorColor !== null) material.color.set(onErrorColor);
             material.needsUpdate = true;
-        }
-    );
+        });
 }
 
 function createSatinMetalMaterial(color, options = {}) {
@@ -1846,7 +1883,10 @@ function createMaterials() {
         clearcoatRoughness: 0.18,
         envMapIntensity: 0.58
     });
-    loadTextureIntoMaterial(DEFAULT_FLOOR_TEXTURE_URL, floorMaterial, { onErrorColor: 0xf1d6dc });
+    loadTextureIntoMaterial(DEFAULT_FLOOR_TEXTURE_URL, floorMaterial, {
+        onErrorColor: 0xf1d6dc,
+        texturePromise: requestDefaultFloorTexture()
+    });
 
     landmarkMaterial = new THREE.MeshBasicMaterial({ color: new THREE.Color(getComputedStyle(document.body).getPropertyValue('--landmark-color').trim()), transparent: true, blending: THREE.AdditiveBlending });
     
@@ -2162,6 +2202,11 @@ function showFreeModeLevelSelect() {
 
 function showIngameHint(messageKey = 'hint_ingame_controls') {
     const hintEl = document.getElementById('ingame-hint');
+    if (isPortraitTouchScreen()) {
+        clearTimeout(hintTimeout);
+        hintEl.style.display = 'none';
+        return;
+    }
     hintEl.textContent = translations[currentLanguage][messageKey];
     hintEl.style.display = 'block'; hintEl.style.opacity = 1;
     clearTimeout(hintTimeout);
