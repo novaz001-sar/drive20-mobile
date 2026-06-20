@@ -20,6 +20,9 @@ let minimapBgCanvas, minimapBgCtx;
 let minimapBgDirty = true;
 let lastMinimapRenderKey = '';
 let activeLampLights = [];
+let activeTechWallEffects = [];
+let techGoalHalo = null;
+let techGoalPulseParts = [];
 let minimapOrientationMode = 'NORTH_UP'; // 'NORTH_UP' | 'HEADING_UP'
 try {
     const savedMinimapMode = localStorage.getItem('minimap_orientation_mode_v1');
@@ -101,6 +104,49 @@ function isPortraitTouchScreen() {
     return window.innerWidth <= 800 && window.innerHeight > window.innerWidth;
 }
 
+function getAppViewportSize() {
+    const viewport = window.visualViewport;
+    const rawWidth = Math.max(
+        viewport?.width || 0,
+        window.innerWidth || 0,
+        document.documentElement.clientWidth || 0,
+        1
+    );
+    const rawHeight = Math.max(
+        viewport?.height || 0,
+        window.innerHeight || 0,
+        document.documentElement.clientHeight || 0,
+        1
+    );
+    return {
+        width: Math.max(1, Math.round(rawWidth)),
+        height: Math.max(1, Math.round(rawHeight))
+    };
+}
+
+function syncAppViewportSize() {
+    const { width, height } = getAppViewportSize();
+    document.documentElement.style.setProperty('--app-width', `${width}px`);
+    document.documentElement.style.setProperty('--app-height', `${height}px`);
+    return { width, height };
+}
+
+function syncRendererToViewport() {
+    const { width, height } = syncAppViewportSize();
+    if (!camera || !renderer) return;
+    camera.aspect = width / height;
+    camera.updateProjectionMatrix();
+    renderer.setPixelRatio(getRendererPixelRatio());
+    renderer.setSize(width, height);
+}
+
+function scheduleInitialViewportSync() {
+    const sync = () => syncRendererToViewport();
+    requestAnimationFrame(sync);
+    requestAnimationFrame(() => requestAnimationFrame(sync));
+    [80, 220, 520, 900].forEach(delay => setTimeout(sync, delay));
+}
+
 function getRendererPixelRatio() {
     const deviceRatio = window.devicePixelRatio || 1;
     return Math.min(deviceRatio, prefersMobilePerformance() ? 1.55 : 1.85);
@@ -135,9 +181,10 @@ function setupSkyBackground() {
 async function init() {
     scene = new THREE.Scene();
 
+    const viewportSize = syncAppViewportSize();
     setupSkyBackground();
     scene.fog = new THREE.Fog(scene.userData.skyFogColor, TILE_SIZE * 12, TILE_SIZE * 36);
-    camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 2000);
+    camera = new THREE.PerspectiveCamera(75, viewportSize.width / viewportSize.height, 0.1, 2000);
     renderer = new THREE.WebGLRenderer({
         antialias: true,
         powerPreference: 'high-performance',
@@ -145,7 +192,7 @@ async function init() {
         stencil: false
     });
     renderer.setPixelRatio(getRendererPixelRatio());
-    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setSize(viewportSize.width, viewportSize.height);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.04;
@@ -224,6 +271,9 @@ async function init() {
     loadCustomLevels();
 
     window.addEventListener('resize', onWindowResize, false);
+    window.visualViewport?.addEventListener('resize', onWindowResize, false);
+    window.visualViewport?.addEventListener('scroll', onWindowResize, false);
+    scheduleInitialViewportSync();
     document.addEventListener('keydown', onKeyDown);
     document.addEventListener('keyup', onKeyUp);
     
@@ -732,6 +782,9 @@ function showMainMenu() {
         while(group.children.length > 0){ group.remove(group.children[0]); }
     });
     activeLampLights = [];
+    activeTechWallEffects = [];
+    techGoalHalo = null;
+    techGoalPulseParts = [];
     minimapBgDirty = true;
     lastMinimapRenderKey = '';
     if(goalMarker) {
@@ -779,6 +832,9 @@ function loadLevel(levelData) {
         while(group.children.length > 0){ group.remove(group.children[0]); }
     });
     activeLampLights = [];
+    activeTechWallEffects = [];
+    techGoalHalo = null;
+    techGoalPulseParts = [];
     minimapBgDirty = true;
     lastMinimapRenderKey = '';
     if(goalMarker) {
@@ -1098,6 +1154,12 @@ function animate() {
 
     const nightIntensity = Math.max(0, 1 - dayNightCycle * 3);
     activeLampLights.forEach(light => { light.intensity = nightIntensity * 5.5; });
+    activeTechWallEffects.forEach(effect => {
+        const pulse = (Math.sin(elapsedTime * effect.speed + effect.phase) + 1) / 2;
+        effect.boltMaterial.opacity = 0.58 + pulse * 0.38;
+        effect.railMaterial.opacity = 0.22 + pulse * 0.22;
+        if (effect.light) effect.light.intensity = 0.24 + pulse * 0.62;
+    });
 
     // Object animations (Lucky Cat, Heart, Waypoints)
     if (goalMarker && luckyCatArm) {
@@ -1107,6 +1169,12 @@ function animate() {
         luckyCatArm.rotation.x = toRad(LUCKY_CAT.WAVE_CENTER_DEG) + Math.sin(elapsedTime * LUCKY_CAT.WAVE_SPEED) * toRad(LUCKY_CAT.WAVE_AMPL_DEG);
         if (luckyCatWrist) luckyCatWrist.rotation.x = Math.sin(elapsedTime * LUCKY_CAT.WRIST_SPEED) * toRad(LUCKY_CAT.WRIST_AMPL_DEG);
     }
+    if (techGoalHalo) techGoalHalo.rotation.z += delta * 0.9;
+    techGoalPulseParts.forEach(part => {
+        const pulse = (Math.sin(elapsedTime * part.speed + part.phase) + 1) / 2;
+        part.material.opacity = part.baseOpacity + pulse * part.pulseOpacity;
+        if (part.light) part.light.intensity = part.baseIntensity + pulse * part.pulseIntensity;
+    });
     if (floatingHeart) {
         const t = elapsedTime * 1.5;
         floatingHeart.position.y = floatingHeart.userData.baseY + Math.sin(t) * 0.18;
@@ -1214,10 +1282,7 @@ function animate() {
 }
 
 function onWindowResize() {
-    camera.aspect = window.innerWidth / window.innerHeight;
-    camera.updateProjectionMatrix();
-    renderer.setPixelRatio(getRendererPixelRatio());
-    renderer.setSize(window.innerWidth, window.innerHeight);
+    syncRendererToViewport();
     if (isPortraitTouchScreen()) {
         const hintEl = document.getElementById('ingame-hint');
         if (hintEl) hintEl.style.display = 'none';
@@ -1358,6 +1423,105 @@ function createInstancedWallBatch(geometry, material, transforms) {
     mazeGroup.add(batch);
 }
 
+function createTechWallEffect(transform, index, usePointLight) {
+    const group = new THREE.Group();
+    group.position.set(transform.x, WALL_HEIGHT + 0.24, transform.z);
+    group.rotation.y = transform.rotationY;
+
+    const accentColor = index % 2 === 0 ? 0x67e8f9 : 0xf472b6;
+    const railMaterial = new THREE.MeshBasicMaterial({
+        color: accentColor,
+        transparent: true,
+        opacity: 0.5,
+        depthWrite: false
+    });
+    const boltMaterial = new THREE.MeshBasicMaterial({
+        color: accentColor,
+        transparent: true,
+        opacity: 0.96,
+        depthWrite: false
+    });
+
+    const rail = new THREE.Mesh(new THREE.BoxGeometry(TILE_SIZE * 0.72, 0.06, 0.12), railMaterial);
+    rail.position.z = 0.12;
+    rail.name = 'techWallRail';
+    group.add(rail);
+
+    const points = [];
+    const segments = 5;
+    for (let i = 0; i <= segments; i++) {
+        const x = -TILE_SIZE * 0.36 + (TILE_SIZE * 0.72 * i / segments);
+        const y = ((i + index) % 2 === 0 ? 0.05 : 0.28);
+        const z = 0.2 + (((i * 7 + index) % 3) - 1) * 0.03;
+        points.push(new THREE.Vector3(x, y, z));
+    }
+    const curve = new THREE.CatmullRomCurve3(points);
+    const bolt = new THREE.Mesh(new THREE.TubeGeometry(curve, 18, 0.055, 6, false), boltMaterial);
+    bolt.name = 'techWallBolt';
+    bolt.renderOrder = 3;
+    group.add(bolt);
+
+    points.forEach((point, pointIndex) => {
+        if (pointIndex % 2 === 0) {
+            const spark = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 6), boltMaterial);
+            spark.position.copy(point);
+            spark.name = 'techWallSpark';
+            group.add(spark);
+        }
+    });
+
+    let light = null;
+    if (usePointLight) {
+        light = new THREE.PointLight(accentColor, 0.55, TILE_SIZE * 1.45, 1.9);
+        light.position.set(0, 0.18, 0.28);
+        group.add(light);
+    }
+
+    sceneryGroup.add(group);
+    activeTechWallEffects.push({
+        boltMaterial,
+        railMaterial,
+        light,
+        phase: index * 0.73,
+        speed: 4.2 + (index % 5) * 0.34
+    });
+}
+
+function addTechWallLighting(wallBatches, gridWidth, gridHeight) {
+    const allWalls = Object.entries(wallBatches)
+        .flatMap(([type, transforms]) => transforms.map((transform, index) => ({ type, transform, index })));
+    if (allWalls.length === 0) return;
+
+    const cellCount = gridWidth * gridHeight;
+    const maxEffects = cellCount > 900 ? 12 : cellCount > 500 ? 16 : 22;
+    const spacing = cellCount > 900 ? 9 : cellCount > 500 ? 7 : 5;
+    const selected = [];
+
+    allWalls.forEach((item) => {
+        const seed = Math.abs(Math.round(item.transform.x * 17 + item.transform.z * 31 + item.index * 13));
+        const isGoalAccent = item.type === 'goal' && seed % 2 === 0;
+        if (selected.length < maxEffects && (isGoalAccent || seed % spacing === 0)) {
+            selected.push(item.transform);
+        }
+    });
+
+    if (selected.length < Math.min(8, allWalls.length)) {
+        allWalls
+            .slice()
+            .sort((a, b) => {
+                const seedA = Math.abs(Math.round(a.transform.x * 19 + a.transform.z * 23));
+                const seedB = Math.abs(Math.round(b.transform.x * 19 + b.transform.z * 23));
+                return seedA - seedB;
+            })
+            .some((item) => {
+                if (!selected.includes(item.transform)) selected.push(item.transform);
+                return selected.length >= Math.min(maxEffects, 8, allWalls.length);
+            });
+    }
+
+    selected.slice(0, maxEffects).forEach((transform, index) => createTechWallEffect(transform, index, index < 8));
+}
+
 function createMazeMesh(grid, goal) {
     const gridWidth = grid[0].length;
     const gridHeight = grid.length;
@@ -1411,6 +1575,7 @@ function createMazeMesh(grid, goal) {
     createInstancedWallBatch(wallGeo, wallMaterialE, wallBatches.east);
     createInstancedWallBatch(wallGeo, wallMaterialW, wallBatches.west);
     createInstancedWallBatch(wallGeo, goalWallMaterial, wallBatches.goal);
+    addTechWallLighting(wallBatches, gridWidth, gridHeight);
 }
 
 function createLuckyCat() {
@@ -1468,21 +1633,151 @@ function createLuckyCat() {
     return catGroup;
 }
 
+function createTechLuckyCat() {
+    const catGroup = createLuckyCat();
+    catGroup.name = 'techLuckyCat';
+
+    const cyanMat = new THREE.MeshBasicMaterial({
+        color: 0x67e8f9,
+        transparent: true,
+        opacity: 0.78,
+        depthWrite: false
+    });
+    const pinkMat = new THREE.MeshBasicMaterial({
+        color: 0xf472b6,
+        transparent: true,
+        opacity: 0.7,
+        depthWrite: false
+    });
+    const visorMat = new THREE.MeshPhysicalMaterial({
+        color: 0x8ff7ff,
+        emissive: 0x00d5ff,
+        emissiveIntensity: 0.85,
+        metalness: 0.25,
+        roughness: 0.08,
+        clearcoat: 0.65,
+        clearcoatRoughness: 0.08,
+        transparent: true,
+        opacity: 0.72
+    });
+    const panelMat = new THREE.MeshPhysicalMaterial({
+        color: 0x0f172a,
+        emissive: 0x123f6b,
+        emissiveIntensity: 0.45,
+        metalness: 0.55,
+        roughness: 0.22,
+        clearcoat: 0.5
+    });
+
+    const visor = new THREE.Mesh(new THREE.BoxGeometry(1.45, 0.22, 0.08), visorMat);
+    visor.position.set(0, 2.03, 1.2);
+    visor.name = 'techCatVisor';
+    catGroup.add(visor);
+
+    const visorLine = new THREE.Mesh(new THREE.BoxGeometry(1.22, 0.035, 0.035), cyanMat);
+    visorLine.position.set(0, 2.04, 1.27);
+    catGroup.add(visorLine);
+
+    const chestPanel = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.74, 0.07), panelMat);
+    chestPanel.position.set(0, 0.18, 1.32);
+    chestPanel.rotation.x = THREE.MathUtils.degToRad(-5);
+    catGroup.add(chestPanel);
+
+    const circuitPieces = [
+        { x: -0.34, y: 0.36, w: 0.08, h: 0.48, mat: cyanMat },
+        { x: 0.02, y: 0.16, w: 0.52, h: 0.06, mat: pinkMat },
+        { x: 0.32, y: -0.12, w: 0.08, h: 0.42, mat: cyanMat },
+        { x: -0.04, y: -0.28, w: 0.42, h: 0.06, mat: pinkMat }
+    ];
+    circuitPieces.forEach(piece => {
+        const mesh = new THREE.Mesh(new THREE.BoxGeometry(piece.w, piece.h, 0.035), piece.mat);
+        mesh.position.set(piece.x, piece.y, 0.055);
+        chestPanel.add(mesh);
+    });
+
+    const halo = new THREE.Mesh(new THREE.TorusGeometry(1.55, 0.035, 8, 52), cyanMat);
+    halo.position.set(0, 3.28, 0.06);
+    halo.rotation.x = Math.PI / 2;
+    halo.name = 'techGoalHalo';
+    catGroup.add(halo);
+    techGoalHalo = halo;
+
+    const collarGlow = new THREE.Mesh(new THREE.TorusGeometry(1.34, 0.055, 8, 42), pinkMat);
+    collarGlow.position.y = 1.22;
+    collarGlow.rotation.x = Math.PI / 2;
+    catGroup.add(collarGlow);
+
+    const antenna = new THREE.Group();
+    const antennaStem = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.78, 8), cyanMat);
+    antennaStem.position.y = 0.38;
+    antenna.add(antennaStem);
+    const antennaOrb = new THREE.Mesh(new THREE.SphereGeometry(0.13, 12, 8), pinkMat);
+    antennaOrb.position.y = 0.82;
+    antenna.add(antennaOrb);
+    antenna.position.set(0.86, 2.78, 0.05);
+    antenna.rotation.z = THREE.MathUtils.degToRad(-22);
+    catGroup.add(antenna);
+
+    const earChipGeo = new THREE.BoxGeometry(0.28, 0.1, 0.06);
+    const leftChip = new THREE.Mesh(earChipGeo, cyanMat);
+    leftChip.position.set(-0.82, 2.68, 0.34);
+    leftChip.rotation.z = THREE.MathUtils.degToRad(14);
+    catGroup.add(leftChip);
+    const rightChip = new THREE.Mesh(earChipGeo, cyanMat);
+    rightChip.position.set(0.82, 2.68, 0.34);
+    rightChip.rotation.z = THREE.MathUtils.degToRad(-14);
+    catGroup.add(rightChip);
+
+    const techLight = new THREE.PointLight(0x67e8f9, 1.0, TILE_SIZE * 2.2, 1.35);
+    techLight.position.set(0, 2.15, 1.85);
+    catGroup.add(techLight);
+
+    techGoalPulseParts.push(
+        { material: cyanMat, baseOpacity: 0.56, pulseOpacity: 0.34, phase: 0, speed: 3.2, light: techLight, baseIntensity: 0.62, pulseIntensity: 0.68 },
+        { material: pinkMat, baseOpacity: 0.5, pulseOpacity: 0.34, phase: 1.4, speed: 3.8 }
+    );
+
+    return catGroup;
+}
+
 function createGoalMarker(goalCoords) {
     const level = (currentLevelIndex === -1) ? customLevels[selectedCustomMapIndex] : levels[currentLevelIndex];
     const goalPos = gridToWorld(goalCoords.x, goalCoords.z, level.grid);
+    const isTechGoal = currentLevelState.isWaypointMode;
+    techGoalHalo = null;
+    techGoalPulseParts = [];
     goalMarker = new THREE.Group();
-    const cat = createLuckyCat();
+    goalMarker.userData.techGoal = isTechGoal;
+    const cat = isTechGoal ? createTechLuckyCat() : createLuckyCat();
     cat.scale.set(1.5, 1.5, 1.5); goalMarker.add(cat);
     const heartShape = new THREE.Shape();
     const [x,y,s] = [0,0,0.6];
     heartShape.moveTo(x+0.5*s,y+0.5*s).bezierCurveTo(x+0.5*s,y+0.5*s,x+0.4*s,y,x,y).bezierCurveTo(x-0.6*s,y,x-0.6*s,y+0.7*s,x-0.6*s,y+0.7*s).bezierCurveTo(x-0.6*s,y+1.1*s,x-0.3*s,y+1.54*s,x+0.5*s,y+1.9*s).bezierCurveTo(x+1.2*s,y+1.54*s,x+1.6*s,y+1.1*s,x+1.6*s,y+0.7*s).bezierCurveTo(x+1.6*s,y+0.7*s,x+1.6*s,y,x+1.0*s,y).bezierCurveTo(x+0.7*s,y,x+0.5*s,y+0.5*s,x+0.5*s,y+0.5*s);
     const heartGeo = new THREE.ExtrudeGeometry(heartShape, { depth: 0.25, bevelEnabled: true, bevelSegments: 2, steps: 1, bevelSize: 0.08, bevelThickness: 0.08 });
-    const heart = new THREE.Mesh(heartGeo, new THREE.MeshBasicMaterial({ color: 0xff4d6d, depthTest: true, depthWrite: true }));
+    const heartMat = new THREE.MeshBasicMaterial({
+        color: isTechGoal ? 0x67e8f9 : 0xff4d6d,
+        transparent: isTechGoal,
+        opacity: isTechGoal ? 0.88 : 1,
+        depthTest: true,
+        depthWrite: true
+    });
+    const heart = new THREE.Mesh(heartGeo, heartMat);
     heart.position.set(0, 6.2, 0.2); heart.rotation.x = Math.PI; heart.scale.set(0.9, 0.9, 0.9);
     goalMarker.add(heart);
     floatingHeart = heart;
     floatingHeart.userData.baseY = heart.position.y;
+    if (isTechGoal) {
+        const baseRing = new THREE.Mesh(new THREE.TorusGeometry(2.0, 0.04, 8, 52), new THREE.MeshBasicMaterial({
+            color: 0x67e8f9,
+            transparent: true,
+            opacity: 0.5,
+            depthWrite: false
+        }));
+        baseRing.position.y = -0.05;
+        baseRing.rotation.x = Math.PI / 2;
+        goalMarker.add(baseRing);
+        techGoalPulseParts.push({ material: heartMat, baseOpacity: 0.68, pulseOpacity: 0.28, phase: 2.1, speed: 4.1 });
+    }
     goalMarker.position.copy(goalPos);
     goalMarker.position.y = WALL_HEIGHT/2 - 1.5;
     scene.add(goalMarker);
