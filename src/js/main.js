@@ -59,6 +59,14 @@ let currentLevelState = {
 let activeFireworks = [];
 let activeGoalHeartBursts = [];
 let levelCompleteTimeout = null;
+let goalHeartGeometryCache = null;
+const goalHeartMaterialsCache = { classic: null, tech: null };
+const goalHeartTempMatrix = new THREE.Matrix4();
+const goalHeartTempPosition = new THREE.Vector3();
+const goalHeartTempScale = new THREE.Vector3();
+const goalHeartTempQuaternion = new THREE.Quaternion();
+const goalHeartSpinQuaternion = new THREE.Quaternion();
+const GOAL_HEART_SPIN_AXIS = new THREE.Vector3(0, 0, 1);
 
 let targetPosition = new THREE.Vector3();
 let targetRotation = new THREE.Euler();
@@ -273,6 +281,7 @@ async function init() {
     requestDefaultFloorTexture();
     createMaterials();
     loadCustomLevels();
+    warmGoalHeartBurstResources();
 
     window.addEventListener('resize', onWindowResize, false);
     window.visualViewport?.addEventListener('resize', onWindowResize, false);
@@ -1257,29 +1266,48 @@ function animate() {
         const burst = activeGoalHeartBursts[i];
         let allHeartsGone = true;
         burst.hearts.forEach(heart => {
-            if (heart.userData.lifespan > 0) {
+            const mesh = burst.meshes[heart.meshIndex];
+            if (heart.lifespan > 0) {
                 allHeartsGone = false;
-                heart.userData.velocity.y -= delta * 0.55;
-                heart.position.add(heart.userData.velocity.clone().multiplyScalar(delta));
-                heart.rotation.z += heart.userData.spin * delta;
-                heart.userData.lifespan -= delta;
-                const lifeRatio = Math.max(0, heart.userData.lifespan / heart.userData.maxLifespan);
-                heart.material.opacity = Math.pow(lifeRatio, 0.75) * heart.userData.baseOpacity;
-                const scale = heart.userData.baseScale * (0.75 + (1 - lifeRatio) * 0.9);
-                heart.scale.set(scale, scale, scale);
-                if (camera) heart.quaternion.copy(camera.quaternion);
+                heart.vy -= delta * 0.55;
+                heart.x += heart.vx * delta;
+                heart.y += heart.vy * delta;
+                heart.z += heart.vz * delta;
+                heart.rotation += heart.spin * delta;
+                heart.lifespan -= delta;
+                const lifeRatio = Math.max(0, heart.lifespan / heart.maxLifespan);
+                const scale = heart.baseScale * (0.75 + (1 - lifeRatio) * 0.9);
+                goalHeartTempPosition.set(heart.x, heart.y, heart.z);
+                goalHeartTempScale.set(scale, scale, scale);
+                if (camera) {
+                    goalHeartTempQuaternion.copy(camera.quaternion);
+                    goalHeartSpinQuaternion.setFromAxisAngle(GOAL_HEART_SPIN_AXIS, heart.rotation);
+                    goalHeartTempQuaternion.multiply(goalHeartSpinQuaternion);
+                } else {
+                    goalHeartTempQuaternion.identity();
+                }
+                goalHeartTempMatrix.compose(goalHeartTempPosition, goalHeartTempQuaternion, goalHeartTempScale);
             } else {
-                heart.visible = false;
+                goalHeartTempPosition.set(0, 0, 0);
+                goalHeartTempScale.set(0.0001, 0.0001, 0.0001);
+                goalHeartTempQuaternion.identity();
+                goalHeartTempMatrix.compose(goalHeartTempPosition, goalHeartTempQuaternion, goalHeartTempScale);
             }
+            mesh.setMatrixAt(heart.instanceIndex, goalHeartTempMatrix);
         });
+        burst.meshes.forEach(mesh => {
+            mesh.instanceMatrix.needsUpdate = true;
+            const burstLifeRatio = Math.max(0, burst.lifespan / burst.maxLifespan);
+            mesh.material.opacity = Math.pow(burstLifeRatio, 0.75) * burst.baseOpacity;
+        });
+        burst.lifespan -= delta;
         if (burst.light) {
             burst.light.intensity = Math.max(0, burst.light.intensity - delta * 1.8);
         }
         if (allHeartsGone) {
-            burst.hearts.forEach(heart => {
-                if (heart.material && heart.material.dispose) heart.material.dispose();
+            burst.meshes.forEach(mesh => {
+                if (mesh.dispose) mesh.dispose();
             });
-            if (burst.geometry) burst.geometry.dispose();
             scene.remove(burst.group);
             activeGoalHeartBursts.splice(i, 1);
         }
@@ -1751,6 +1779,7 @@ function createWaypointMesh(number, color = '#8A2BE2') {
 }
 
 function createHeartShapeGeometry() {
+    if (goalHeartGeometryCache) return goalHeartGeometryCache;
     const shape = new THREE.Shape();
     shape.moveTo(0, 0.32);
     shape.bezierCurveTo(0, 0.32, -0.52, -0.12, -0.52, -0.46);
@@ -1762,15 +1791,59 @@ function createHeartShapeGeometry() {
     shape.bezierCurveTo(0.18, 0.5, 0.07, 0.4, 0, 0.32);
     const geometry = new THREE.ShapeGeometry(shape, 16);
     geometry.center();
-    return geometry;
+    goalHeartGeometryCache = geometry;
+    return goalHeartGeometryCache;
+}
+
+function getGoalHeartColors(isTechGoal = false) {
+    return isTechGoal
+        ? [0xff4fd8, 0x5ee7ff, 0xf8fdff, 0x8b5cf6]
+        : [0xff4d6d, 0xff79a8, 0xffb3c7, 0xfff0f5];
+}
+
+function getGoalHeartMaterials(isTechGoal = false) {
+    const key = isTechGoal ? 'tech' : 'classic';
+    if (!goalHeartMaterialsCache[key]) {
+        goalHeartMaterialsCache[key] = getGoalHeartColors(isTechGoal).map(color => new THREE.MeshBasicMaterial({
+            color,
+            transparent: true,
+            opacity: 0.94,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false,
+            side: THREE.DoubleSide
+        }));
+    }
+    return goalHeartMaterialsCache[key];
+}
+
+function warmGoalHeartBurstResources() {
+    const geometry = createHeartShapeGeometry();
+    getGoalHeartMaterials(false);
+    getGoalHeartMaterials(true);
+    if (!renderer || !scene || !camera) return;
+
+    const warmGroup = new THREE.Group();
+    goalHeartTempScale.set(0.001, 0.001, 0.001);
+    goalHeartTempPosition.set(0, -1000, 0);
+    goalHeartTempQuaternion.identity();
+    goalHeartTempMatrix.compose(goalHeartTempPosition, goalHeartTempQuaternion, goalHeartTempScale);
+    [...getGoalHeartMaterials(false), ...getGoalHeartMaterials(true)].forEach(material => {
+        const mesh = new THREE.InstancedMesh(geometry, material, 1);
+        mesh.setMatrixAt(0, goalHeartTempMatrix);
+        warmGroup.add(mesh);
+    });
+    scene.add(warmGroup);
+    renderer.compile(scene, camera);
+    scene.remove(warmGroup);
 }
 
 function clearGoalHeartBursts() {
     activeGoalHeartBursts.forEach(burst => {
-        burst.hearts.forEach(heart => {
-            if (heart.material && heart.material.dispose) heart.material.dispose();
-        });
-        if (burst.geometry) burst.geometry.dispose();
+        if (burst.meshes) {
+            burst.meshes.forEach(mesh => {
+                if (mesh.dispose) mesh.dispose();
+            });
+        }
         if (burst.group) scene.remove(burst.group);
     });
     activeGoalHeartBursts = [];
@@ -1784,52 +1857,70 @@ function createGoalHeartBurst(position, isTechGoal = false) {
     scene.add(burstGroup);
 
     const geometry = createHeartShapeGeometry();
+    const materials = getGoalHeartMaterials(isTechGoal);
     const hearts = [];
-    const colors = isTechGoal
-        ? [0xff4fd8, 0x5ee7ff, 0xf8fdff, 0x8b5cf6]
-        : [0xff4d6d, 0xff79a8, 0xffb3c7, 0xfff0f5];
-    const count = prefersMobilePerformance() ? 28 : 42;
+    const count = prefersMobilePerformance() ? 32 : 48;
+    const meshCapacity = Math.ceil(count / materials.length);
+    const meshes = materials.map(material => {
+        material.opacity = 0.94;
+        const mesh = new THREE.InstancedMesh(geometry, material, meshCapacity);
+        mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+        mesh.frustumCulled = false;
+        mesh.count = 0;
+        burstGroup.add(mesh);
+        return mesh;
+    });
+    const instanceCounts = new Array(materials.length).fill(0);
+    let maxLifespan = 0;
 
     for (let i = 0; i < count; i++) {
-        const color = colors[i % colors.length];
-        const material = new THREE.MeshBasicMaterial({
-            color,
-            transparent: true,
-            opacity: 0.94,
-            blending: THREE.AdditiveBlending,
-            depthWrite: false,
-            side: THREE.DoubleSide
-        });
-        const heart = new THREE.Mesh(geometry, material);
+        const meshIndex = i % meshes.length;
+        const instanceIndex = instanceCounts[meshIndex]++;
         const theta = Math.random() * Math.PI * 2;
         const lift = Math.random() * 1.2 + 1.0;
         const spread = Math.random() * 4.2 + 2.2;
-        heart.position.set(
-            Math.cos(theta) * (Math.random() * 0.45),
-            Math.random() * 0.65,
-            Math.sin(theta) * (Math.random() * 0.45)
-        );
-        heart.userData.velocity = new THREE.Vector3(
-            Math.cos(theta) * spread,
-            lift + Math.random() * 2.4,
-            Math.sin(theta) * spread
-        );
-        heart.userData.maxLifespan = 1.9 + Math.random() * 1.15;
-        heart.userData.lifespan = heart.userData.maxLifespan;
-        heart.userData.baseOpacity = 0.72 + Math.random() * 0.26;
-        heart.userData.baseScale = 0.26 + Math.random() * 0.34;
-        heart.userData.spin = (Math.random() - 0.5) * 6.2;
-        heart.scale.setScalar(heart.userData.baseScale);
-        heart.rotation.z = Math.random() * Math.PI * 2;
-        burstGroup.add(heart);
+        const lifespan = 1.9 + Math.random() * 1.15;
+        maxLifespan = Math.max(maxLifespan, lifespan);
+        const heart = {
+            meshIndex,
+            instanceIndex,
+            x: Math.cos(theta) * (Math.random() * 0.45),
+            y: Math.random() * 0.65,
+            z: Math.sin(theta) * (Math.random() * 0.45),
+            vx: Math.cos(theta) * spread,
+            vy: lift + Math.random() * 2.4,
+            vz: Math.sin(theta) * spread,
+            maxLifespan: lifespan,
+            lifespan,
+            baseScale: 0.26 + Math.random() * 0.34,
+            spin: (Math.random() - 0.5) * 6.2,
+            rotation: Math.random() * Math.PI * 2
+        };
+        goalHeartTempPosition.set(heart.x, heart.y, heart.z);
+        goalHeartTempScale.setScalar(heart.baseScale);
+        goalHeartTempQuaternion.identity();
+        goalHeartTempMatrix.compose(goalHeartTempPosition, goalHeartTempQuaternion, goalHeartTempScale);
+        meshes[meshIndex].setMatrixAt(instanceIndex, goalHeartTempMatrix);
         hearts.push(heart);
     }
+    meshes.forEach((mesh, index) => {
+        mesh.count = instanceCounts[index];
+        mesh.instanceMatrix.needsUpdate = true;
+    });
 
     const light = new THREE.PointLight(isTechGoal ? 0xff4fd8 : 0xff7aa8, 1.6, TILE_SIZE * 3.0, 1.7);
     light.position.set(0, 2.2, 0);
     burstGroup.add(light);
 
-    activeGoalHeartBursts.push({ group: burstGroup, hearts, geometry, light });
+    activeGoalHeartBursts.push({
+        group: burstGroup,
+        hearts,
+        meshes,
+        light,
+        maxLifespan,
+        lifespan: maxLifespan,
+        baseOpacity: 0.94
+    });
 }
 
 // Enhanced Firework Effect Implementation (v10.0)
