@@ -4,6 +4,7 @@ import { TextGeometry } from 'three/addons/geometries/TextGeometry.js';
 import { TILE_SIZE, WALL_HEIGHT, MOVE_SPEED, TURN_SPEED, LUCKY_CAT } from './constants.js';
 import { translations } from './i18n.js';
 import { levels } from './levels.js';
+import { createTechLuckyCatAsset } from './assets/techLuckyCat.js';
 
 // ====================================================================
 // 全局变量和状态机 (Global Variables & State Machine)
@@ -55,6 +56,8 @@ let currentLevelState = {
     touchedHighlightFloors: new Set()
 };
 let activeFireworks = [];
+let activeGoalHeartBursts = [];
+let levelCompleteTimeout = null;
 
 let targetPosition = new THREE.Vector3();
 let targetRotation = new THREE.Euler();
@@ -774,6 +777,10 @@ function setupDevPanel() {
 
 function showMainMenu() {
     gameState = 'MAIN_MENU';
+    if (levelCompleteTimeout) {
+        clearTimeout(levelCompleteTimeout);
+        levelCompleteTimeout = null;
+    }
     document.getElementById('main-menu-modal').style.display = 'flex';
     document.getElementById('custom-mode-btn').disabled = !customLevels.some(level => level !== null);
     document.getElementById('main-menu-info-box').innerHTML = '';
@@ -785,6 +792,7 @@ function showMainMenu() {
     activeTechWallEffects = [];
     techGoalHalo = null;
     techGoalPulseParts = [];
+    clearGoalHeartBursts();
     minimapBgDirty = true;
     lastMinimapRenderKey = '';
     if(goalMarker) {
@@ -808,6 +816,10 @@ function showMainMenu() {
 // ====================================================================
 
 function loadLevel(levelData) {
+    if (levelCompleteTimeout) {
+        clearTimeout(levelCompleteTimeout);
+        levelCompleteTimeout = null;
+    }
     let level;
     if (typeof levelData === 'number') {
         if (levelData >= levels.length) {
@@ -835,6 +847,7 @@ function loadLevel(levelData) {
     activeTechWallEffects = [];
     techGoalHalo = null;
     techGoalPulseParts = [];
+    clearGoalHeartBursts();
     minimapBgDirty = true;
     lastMinimapRenderKey = '';
     if(goalMarker) {
@@ -996,7 +1009,11 @@ function afterMoveChecks() {
             checkForTurns({ showPrompt: false });
         } else {
             gameState = 'LEVEL_COMPLETE';
-            showLevelComplete();
+            createGoalHeartBurst(goalMarker ? goalMarker.position : player.position, Boolean(goalMarker?.userData?.techGoal));
+            levelCompleteTimeout = setTimeout(() => {
+                levelCompleteTimeout = null;
+                if (gameState === 'LEVEL_COMPLETE') showLevelComplete();
+            }, 650);
         }
         return;
     }
@@ -1155,10 +1172,20 @@ function animate() {
     const nightIntensity = Math.max(0, 1 - dayNightCycle * 3);
     activeLampLights.forEach(light => { light.intensity = nightIntensity * 5.5; });
     activeTechWallEffects.forEach(effect => {
-        const pulse = (Math.sin(elapsedTime * effect.speed + effect.phase) + 1) / 2;
-        effect.boltMaterial.opacity = 0.58 + pulse * 0.38;
-        effect.railMaterial.opacity = 0.22 + pulse * 0.22;
-        if (effect.light) effect.light.intensity = 0.24 + pulse * 0.62;
+        const flow = (elapsedTime * effect.speed + effect.phase) % 1;
+        const pulse = (Math.sin(elapsedTime * 4.8 + effect.phase * 8) + 1) / 2;
+        effect.auraMaterial.opacity = 0.12 + pulse * 0.22;
+        effect.railMaterials.forEach((material, index) => {
+            material.opacity = (index === 0 ? 0.68 : 0.5) + pulse * 0.26;
+        });
+        effect.gateMaterials.forEach((material, index) => {
+            const gatePulse = (Math.sin(elapsedTime * 7.2 + effect.phase * 5 + index * 0.8) + 1) / 2;
+            material.opacity = 0.26 + gatePulse * 0.58;
+        });
+        effect.pulse.position.x = -effect.travelDistance / 2 + flow * effect.travelDistance;
+        effect.pulse.scale.set(1.2 + pulse * 0.7, 0.62 + pulse * 0.24, 0.62 + pulse * 0.24);
+        effect.pulseMaterial.opacity = 0.58 + pulse * 0.42;
+        if (effect.light) effect.light.intensity = 0.18 + pulse * 0.78;
     });
 
     // Object animations (Lucky Cat, Heart, Waypoints)
@@ -1222,6 +1249,38 @@ function animate() {
             });
             scene.remove(firework.group);
             activeFireworks.splice(i, 1);
+        }
+    }
+
+    for (let i = activeGoalHeartBursts.length - 1; i >= 0; i--) {
+        const burst = activeGoalHeartBursts[i];
+        let allHeartsGone = true;
+        burst.hearts.forEach(heart => {
+            if (heart.userData.lifespan > 0) {
+                allHeartsGone = false;
+                heart.userData.velocity.y -= delta * 0.55;
+                heart.position.add(heart.userData.velocity.clone().multiplyScalar(delta));
+                heart.rotation.z += heart.userData.spin * delta;
+                heart.userData.lifespan -= delta;
+                const lifeRatio = Math.max(0, heart.userData.lifespan / heart.userData.maxLifespan);
+                heart.material.opacity = Math.pow(lifeRatio, 0.75) * heart.userData.baseOpacity;
+                const scale = heart.userData.baseScale * (0.75 + (1 - lifeRatio) * 0.9);
+                heart.scale.set(scale, scale, scale);
+                if (camera) heart.quaternion.copy(camera.quaternion);
+            } else {
+                heart.visible = false;
+            }
+        });
+        if (burst.light) {
+            burst.light.intensity = Math.max(0, burst.light.intensity - delta * 1.8);
+        }
+        if (allHeartsGone) {
+            burst.hearts.forEach(heart => {
+                if (heart.material && heart.material.dispose) heart.material.dispose();
+            });
+            if (burst.geometry) burst.geometry.dispose();
+            scene.remove(burst.group);
+            activeGoalHeartBursts.splice(i, 1);
         }
     }
 
@@ -1425,65 +1484,101 @@ function createInstancedWallBatch(geometry, material, transforms) {
 
 function createTechWallEffect(transform, index, usePointLight) {
     const group = new THREE.Group();
-    group.position.set(transform.x, WALL_HEIGHT + 0.24, transform.z);
+    group.position.set(transform.x, WALL_HEIGHT + 0.22, transform.z);
     group.rotation.y = transform.rotationY;
 
-    const accentColor = index % 2 === 0 ? 0x67e8f9 : 0xf472b6;
-    const railMaterial = new THREE.MeshBasicMaterial({
-        color: accentColor,
+    const primaryColor = index % 2 === 0 ? 0x00e5ff : 0xff2fd6;
+    const secondaryColor = index % 2 === 0 ? 0x8b5cf6 : 0x00e5ff;
+    const baseMaterial = new THREE.MeshBasicMaterial({
+        color: 0x06111f,
         transparent: true,
-        opacity: 0.5,
+        opacity: 0.62,
         depthWrite: false
     });
-    const boltMaterial = new THREE.MeshBasicMaterial({
-        color: accentColor,
+    const auraMaterial = new THREE.MeshBasicMaterial({
+        color: primaryColor,
+        transparent: true,
+        opacity: 0.18,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
+    });
+    const primaryMaterial = new THREE.MeshBasicMaterial({
+        color: primaryColor,
+        transparent: true,
+        opacity: 0.92,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
+    });
+    const secondaryMaterial = new THREE.MeshBasicMaterial({
+        color: secondaryColor,
+        transparent: true,
+        opacity: 0.74,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
+    });
+    const pulseMaterial = new THREE.MeshBasicMaterial({
+        color: 0xf8fdff,
         transparent: true,
         opacity: 0.96,
+        blending: THREE.AdditiveBlending,
         depthWrite: false
     });
 
-    const rail = new THREE.Mesh(new THREE.BoxGeometry(TILE_SIZE * 0.72, 0.06, 0.12), railMaterial);
-    rail.position.z = 0.12;
-    rail.name = 'techWallRail';
-    group.add(rail);
+    const aura = new THREE.Mesh(new THREE.PlaneGeometry(TILE_SIZE * 0.94, 0.74), auraMaterial);
+    aura.position.set(0, -0.22, 0.17);
+    aura.name = 'techWallAura';
+    group.add(aura);
 
-    const points = [];
-    const segments = 5;
-    for (let i = 0; i <= segments; i++) {
-        const x = -TILE_SIZE * 0.36 + (TILE_SIZE * 0.72 * i / segments);
-        const y = ((i + index) % 2 === 0 ? 0.05 : 0.28);
-        const z = 0.2 + (((i * 7 + index) % 3) - 1) * 0.03;
-        points.push(new THREE.Vector3(x, y, z));
+    const base = new THREE.Mesh(new THREE.BoxGeometry(TILE_SIZE * 0.88, 0.14, 0.16), baseMaterial);
+    base.position.set(0, 0.05, 0.1);
+    base.name = 'techWallDarkRail';
+    group.add(base);
+
+    const upperRail = new THREE.Mesh(new THREE.BoxGeometry(TILE_SIZE * 0.76, 0.035, 0.06), primaryMaterial);
+    upperRail.position.set(0, 0.15, 0.2);
+    upperRail.name = 'techWallUpperRail';
+    group.add(upperRail);
+
+    const lowerRail = new THREE.Mesh(new THREE.BoxGeometry(TILE_SIZE * 0.72, 0.028, 0.05), secondaryMaterial);
+    lowerRail.position.set(0, -0.02, 0.21);
+    lowerRail.name = 'techWallLowerRail';
+    group.add(lowerRail);
+
+    const gateMaterials = [];
+    for (let i = 0; i < 5; i++) {
+        const gateMaterial = i % 2 === 0 ? primaryMaterial.clone() : secondaryMaterial.clone();
+        gateMaterial.opacity = 0.5;
+        const gate = new THREE.Mesh(new THREE.BoxGeometry(0.065, 0.34, 0.055), gateMaterial);
+        gate.position.set(-TILE_SIZE * 0.34 + i * TILE_SIZE * 0.17, 0.055, 0.23);
+        gate.name = 'techWallGate';
+        group.add(gate);
+        gateMaterials.push(gateMaterial);
     }
-    const curve = new THREE.CatmullRomCurve3(points);
-    const bolt = new THREE.Mesh(new THREE.TubeGeometry(curve, 18, 0.055, 6, false), boltMaterial);
-    bolt.name = 'techWallBolt';
-    bolt.renderOrder = 3;
-    group.add(bolt);
 
-    points.forEach((point, pointIndex) => {
-        if (pointIndex % 2 === 0) {
-            const spark = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 6), boltMaterial);
-            spark.position.copy(point);
-            spark.name = 'techWallSpark';
-            group.add(spark);
-        }
-    });
+    const pulse = new THREE.Mesh(new THREE.SphereGeometry(0.18, 12, 8), pulseMaterial);
+    pulse.position.set(-TILE_SIZE * 0.38, 0.15, 0.28);
+    pulse.scale.set(1.45, 0.72, 0.72);
+    pulse.name = 'techWallPulseCore';
+    group.add(pulse);
 
     let light = null;
     if (usePointLight) {
-        light = new THREE.PointLight(accentColor, 0.55, TILE_SIZE * 1.45, 1.9);
-        light.position.set(0, 0.18, 0.28);
+        light = new THREE.PointLight(primaryColor, 0.65, TILE_SIZE * 1.6, 1.8);
+        light.position.set(0, 0.12, 0.34);
         group.add(light);
     }
 
     sceneryGroup.add(group);
     activeTechWallEffects.push({
-        boltMaterial,
-        railMaterial,
+        auraMaterial,
+        railMaterials: [primaryMaterial, secondaryMaterial],
+        gateMaterials,
+        pulse,
+        pulseMaterial,
+        travelDistance: TILE_SIZE * 0.76,
         light,
-        phase: index * 0.73,
-        speed: 4.2 + (index % 5) * 0.34
+        phase: index * 0.19,
+        speed: 0.34 + (index % 5) * 0.045
     });
 }
 
@@ -1633,113 +1728,6 @@ function createLuckyCat() {
     return catGroup;
 }
 
-function createTechLuckyCat() {
-    const catGroup = createLuckyCat();
-    catGroup.name = 'techLuckyCat';
-
-    const cyanMat = new THREE.MeshBasicMaterial({
-        color: 0x67e8f9,
-        transparent: true,
-        opacity: 0.78,
-        depthWrite: false
-    });
-    const pinkMat = new THREE.MeshBasicMaterial({
-        color: 0xf472b6,
-        transparent: true,
-        opacity: 0.7,
-        depthWrite: false
-    });
-    const visorMat = new THREE.MeshPhysicalMaterial({
-        color: 0x8ff7ff,
-        emissive: 0x00d5ff,
-        emissiveIntensity: 0.85,
-        metalness: 0.25,
-        roughness: 0.08,
-        clearcoat: 0.65,
-        clearcoatRoughness: 0.08,
-        transparent: true,
-        opacity: 0.72
-    });
-    const panelMat = new THREE.MeshPhysicalMaterial({
-        color: 0x0f172a,
-        emissive: 0x123f6b,
-        emissiveIntensity: 0.45,
-        metalness: 0.55,
-        roughness: 0.22,
-        clearcoat: 0.5
-    });
-
-    const visor = new THREE.Mesh(new THREE.BoxGeometry(1.45, 0.22, 0.08), visorMat);
-    visor.position.set(0, 2.03, 1.2);
-    visor.name = 'techCatVisor';
-    catGroup.add(visor);
-
-    const visorLine = new THREE.Mesh(new THREE.BoxGeometry(1.22, 0.035, 0.035), cyanMat);
-    visorLine.position.set(0, 2.04, 1.27);
-    catGroup.add(visorLine);
-
-    const chestPanel = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.74, 0.07), panelMat);
-    chestPanel.position.set(0, 0.18, 1.32);
-    chestPanel.rotation.x = THREE.MathUtils.degToRad(-5);
-    catGroup.add(chestPanel);
-
-    const circuitPieces = [
-        { x: -0.34, y: 0.36, w: 0.08, h: 0.48, mat: cyanMat },
-        { x: 0.02, y: 0.16, w: 0.52, h: 0.06, mat: pinkMat },
-        { x: 0.32, y: -0.12, w: 0.08, h: 0.42, mat: cyanMat },
-        { x: -0.04, y: -0.28, w: 0.42, h: 0.06, mat: pinkMat }
-    ];
-    circuitPieces.forEach(piece => {
-        const mesh = new THREE.Mesh(new THREE.BoxGeometry(piece.w, piece.h, 0.035), piece.mat);
-        mesh.position.set(piece.x, piece.y, 0.055);
-        chestPanel.add(mesh);
-    });
-
-    const halo = new THREE.Mesh(new THREE.TorusGeometry(1.55, 0.035, 8, 52), cyanMat);
-    halo.position.set(0, 3.28, 0.06);
-    halo.rotation.x = Math.PI / 2;
-    halo.name = 'techGoalHalo';
-    catGroup.add(halo);
-    techGoalHalo = halo;
-
-    const collarGlow = new THREE.Mesh(new THREE.TorusGeometry(1.34, 0.055, 8, 42), pinkMat);
-    collarGlow.position.y = 1.22;
-    collarGlow.rotation.x = Math.PI / 2;
-    catGroup.add(collarGlow);
-
-    const antenna = new THREE.Group();
-    const antennaStem = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.78, 8), cyanMat);
-    antennaStem.position.y = 0.38;
-    antenna.add(antennaStem);
-    const antennaOrb = new THREE.Mesh(new THREE.SphereGeometry(0.13, 12, 8), pinkMat);
-    antennaOrb.position.y = 0.82;
-    antenna.add(antennaOrb);
-    antenna.position.set(0.86, 2.78, 0.05);
-    antenna.rotation.z = THREE.MathUtils.degToRad(-22);
-    catGroup.add(antenna);
-
-    const earChipGeo = new THREE.BoxGeometry(0.28, 0.1, 0.06);
-    const leftChip = new THREE.Mesh(earChipGeo, cyanMat);
-    leftChip.position.set(-0.82, 2.68, 0.34);
-    leftChip.rotation.z = THREE.MathUtils.degToRad(14);
-    catGroup.add(leftChip);
-    const rightChip = new THREE.Mesh(earChipGeo, cyanMat);
-    rightChip.position.set(0.82, 2.68, 0.34);
-    rightChip.rotation.z = THREE.MathUtils.degToRad(-14);
-    catGroup.add(rightChip);
-
-    const techLight = new THREE.PointLight(0x67e8f9, 1.0, TILE_SIZE * 2.2, 1.35);
-    techLight.position.set(0, 2.15, 1.85);
-    catGroup.add(techLight);
-
-    techGoalPulseParts.push(
-        { material: cyanMat, baseOpacity: 0.56, pulseOpacity: 0.34, phase: 0, speed: 3.2, light: techLight, baseIntensity: 0.62, pulseIntensity: 0.68 },
-        { material: pinkMat, baseOpacity: 0.5, pulseOpacity: 0.34, phase: 1.4, speed: 3.8 }
-    );
-
-    return catGroup;
-}
-
 function createGoalMarker(goalCoords) {
     const level = (currentLevelIndex === -1) ? customLevels[selectedCustomMapIndex] : levels[currentLevelIndex];
     const goalPos = gridToWorld(goalCoords.x, goalCoords.z, level.grid);
@@ -1748,7 +1736,17 @@ function createGoalMarker(goalCoords) {
     techGoalPulseParts = [];
     goalMarker = new THREE.Group();
     goalMarker.userData.techGoal = isTechGoal;
-    const cat = isTechGoal ? createTechLuckyCat() : createLuckyCat();
+    let cat;
+    if (isTechGoal) {
+        const techCat = createTechLuckyCatAsset();
+        cat = techCat.group;
+        luckyCatArm = techCat.arm;
+        luckyCatWrist = techCat.wrist;
+        techGoalHalo = techCat.halo;
+        techGoalPulseParts.push(...techCat.pulseParts);
+    } else {
+        cat = createLuckyCat();
+    }
     cat.scale.set(1.5, 1.5, 1.5); goalMarker.add(cat);
     const heartShape = new THREE.Shape();
     const [x,y,s] = [0,0,0.6];
@@ -1831,6 +1829,88 @@ function createWaypointMesh(number, color = '#8A2BE2') {
     }
     group.position.y = 0.15;
     return group;
+}
+
+function createHeartShapeGeometry() {
+    const shape = new THREE.Shape();
+    shape.moveTo(0, 0.32);
+    shape.bezierCurveTo(0, 0.32, -0.52, -0.12, -0.52, -0.46);
+    shape.bezierCurveTo(-0.52, -0.72, -0.3, -0.92, -0.06, -0.92);
+    shape.bezierCurveTo(0.12, -0.92, 0.25, -0.8, 0.32, -0.66);
+    shape.bezierCurveTo(0.39, -0.8, 0.52, -0.92, 0.7, -0.92);
+    shape.bezierCurveTo(0.94, -0.92, 1.16, -0.72, 1.16, -0.46);
+    shape.bezierCurveTo(1.16, -0.12, 0.64, 0.32, 0.32, 0.62);
+    shape.bezierCurveTo(0.18, 0.5, 0.07, 0.4, 0, 0.32);
+    const geometry = new THREE.ShapeGeometry(shape, 16);
+    geometry.center();
+    return geometry;
+}
+
+function clearGoalHeartBursts() {
+    activeGoalHeartBursts.forEach(burst => {
+        burst.hearts.forEach(heart => {
+            if (heart.material && heart.material.dispose) heart.material.dispose();
+        });
+        if (burst.geometry) burst.geometry.dispose();
+        if (burst.group) scene.remove(burst.group);
+    });
+    activeGoalHeartBursts = [];
+}
+
+function createGoalHeartBurst(position, isTechGoal = false) {
+    if (!scene) return;
+    const burstGroup = new THREE.Group();
+    burstGroup.position.copy(position);
+    burstGroup.position.y += WALL_HEIGHT * 0.78;
+    scene.add(burstGroup);
+
+    const geometry = createHeartShapeGeometry();
+    const hearts = [];
+    const colors = isTechGoal
+        ? [0xff4fd8, 0x5ee7ff, 0xf8fdff, 0x8b5cf6]
+        : [0xff4d6d, 0xff79a8, 0xffb3c7, 0xfff0f5];
+    const count = prefersMobilePerformance() ? 28 : 42;
+
+    for (let i = 0; i < count; i++) {
+        const color = colors[i % colors.length];
+        const material = new THREE.MeshBasicMaterial({
+            color,
+            transparent: true,
+            opacity: 0.94,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false,
+            side: THREE.DoubleSide
+        });
+        const heart = new THREE.Mesh(geometry, material);
+        const theta = Math.random() * Math.PI * 2;
+        const lift = Math.random() * 1.2 + 1.0;
+        const spread = Math.random() * 4.2 + 2.2;
+        heart.position.set(
+            Math.cos(theta) * (Math.random() * 0.45),
+            Math.random() * 0.65,
+            Math.sin(theta) * (Math.random() * 0.45)
+        );
+        heart.userData.velocity = new THREE.Vector3(
+            Math.cos(theta) * spread,
+            lift + Math.random() * 2.4,
+            Math.sin(theta) * spread
+        );
+        heart.userData.maxLifespan = 1.9 + Math.random() * 1.15;
+        heart.userData.lifespan = heart.userData.maxLifespan;
+        heart.userData.baseOpacity = 0.72 + Math.random() * 0.26;
+        heart.userData.baseScale = 0.26 + Math.random() * 0.34;
+        heart.userData.spin = (Math.random() - 0.5) * 6.2;
+        heart.scale.setScalar(heart.userData.baseScale);
+        heart.rotation.z = Math.random() * Math.PI * 2;
+        burstGroup.add(heart);
+        hearts.push(heart);
+    }
+
+    const light = new THREE.PointLight(isTechGoal ? 0xff4fd8 : 0xff7aa8, 1.6, TILE_SIZE * 3.0, 1.7);
+    light.position.set(0, 2.2, 0);
+    burstGroup.add(light);
+
+    activeGoalHeartBursts.push({ group: burstGroup, hearts, geometry, light });
 }
 
 // Enhanced Firework Effect Implementation (v10.0)
