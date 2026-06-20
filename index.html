@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="theme-color" content="#0f766e">
-    <title>快乐驾驶移动版 Happy Drive Mobile</title>
+    <title>Happy Drive Mobile</title>
     <link rel="stylesheet" href="./src/styles/main.css">
 </head>
 <body>
@@ -42,12 +42,8 @@
             <div id="choice-prompt" class="hud-prompt"></div>
         </div>
 
-        <div id="mobile-drive-controls" aria-label="移动驾驶控制">
-            <button id="mobile-left-btn" class="mobile-drive-btn secondary" type="button" data-action="left" data-lang-zh="左转" data-lang-en="Left">左转</button>
-            <button id="mobile-forward-btn" class="mobile-drive-btn primary" type="button" data-action="forward" data-lang-zh="前进" data-lang-en="Go">前进</button>
-            <button id="mobile-right-btn" class="mobile-drive-btn secondary" type="button" data-action="right" data-lang-zh="右转" data-lang-en="Right">右转</button>
-            <button id="mobile-back-btn" class="mobile-drive-btn quiet" type="button" data-action="back" data-lang-zh="后退" data-lang-en="Back">后退</button>
-            <button id="mobile-pause-btn" class="mobile-drive-btn menu" type="button" data-action="pause" data-lang-zh="菜单" data-lang-en="Menu">菜单</button>
+        <div id="mobile-drive-controls" aria-label="Mobile driving menu">
+            <button id="mobile-pause-btn" class="mobile-drive-btn menu" type="button" data-action="pause" data-lang-zh="菜单" data-lang-en="Menu">Menu</button>
         </div>
     </div>
 
@@ -61,22 +57,22 @@
 
     <div id="startup-modal" class="modal-overlay">
         <div class="modal-content">
-            <h2 data-lang-zh="欢迎来到快乐驾驶" data-lang-en="Welcome to Happy Drive">欢迎来到快乐驾驶</h2>
+            <h2 data-lang-zh="欢迎来到快乐驾驶" data-lang-en="Welcome to Happy Drive">Welcome to Happy Drive</h2>
             <div class="settings-group">
-                <label for="initial-language-select" data-lang-zh="语言 / Language" data-lang-en="语言 / Language">语言 / Language</label>
+                <label for="initial-language-select" data-lang-zh="语言 / Language" data-lang-en="Language">Language</label>
                 <select id="initial-language-select">
+                    <option value="en" selected>English</option>
                     <option value="zh">中文</option>
-                    <option value="en">English</option>
                 </select>
             </div>
-            <p data-lang-zh="为了更好地称呼您，请输入您的信息：" data-lang-en="To get started, please enter your info:">为了更好地称呼您，请输入您的信息：</p>
+            <p data-lang-zh="为了更好地称呼您，请输入您的信息：" data-lang-en="To get started, please enter your info:">To get started, please enter your info:</p>
             <input type="text" id="nickname-input" data-lang-placeholder-zh="请输入您的昵称" data-lang-placeholder-en="Enter your nickname">
             <select id="gender-select">
-                <option value="male" data-lang-zh="男" data-lang-en="Male">男</option>
-                <option value="female" data-lang-zh="女" data-lang-en="Female">女</option>
-                <option value="other" data-lang-zh="其他" data-lang-en="Other">其他</option>
+                <option value="male" data-lang-zh="男" data-lang-en="Male">Male</option>
+                <option value="female" data-lang-zh="女" data-lang-en="Female">Female</option>
+                <option value="other" data-lang-zh="其他" data-lang-en="Other">Other</option>
             </select>
-            <button id="start-game-btn" data-lang-zh="开始游戏" data-lang-en="Start Game">开始游戏</button>
+            <button id="start-game-btn" data-lang-zh="开始游戏" data-lang-en="Start Game">Start Game</button>
         </div>
     </div>
 
@@ -86,7 +82,32 @@
             <button id="free-mode-btn" data-lang-zh="自由模式" data-lang-en="Free Mode">自由模式</button>
             <button id="custom-mode-btn" data-lang-zh="自定义模式" data-lang-en="Custom Mode" disabled>自定义模式</button>
             <button id="editor-mode-btn" data-lang-zh="地图编辑器" data-lang-en="Map Editor">地图编辑器</button>
+            <button id="manual-btn" data-lang-zh="教程" data-lang-en="Manual">Manual</button>
             <div id="main-menu-info-box" class="menu-info-box"></div>
+        </div>
+    </div>
+
+    <div id="manual-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content manual-content">
+            <h2 data-lang-zh="教程" data-lang-en="Manual">Manual</h2>
+            <div class="manual-section">
+                <h3 data-lang-zh="驾驶手势" data-lang-en="Driving Gestures">Driving Gestures</h3>
+                <ul>
+                    <li data-lang-zh="在空白游戏区域向上滑动：前进。" data-lang-en="Swipe up on any empty game area to move forward.">Swipe up on any empty game area to move forward.</li>
+                    <li data-lang-zh="向左或向右滑动：转向。" data-lang-en="Swipe left or right to turn.">Swipe left or right to turn.</li>
+                    <li data-lang-zh="向下滑动：后退。" data-lang-en="Swipe down to move backward.">Swipe down to move backward.</li>
+                    <li data-lang-zh="点击 Menu 可以暂停、选关或重置。" data-lang-en="Tap Menu to pause, select a level, or reset.">Tap Menu to pause, select a level, or reset.</li>
+                </ul>
+            </div>
+            <div class="manual-section">
+                <h3 data-lang-zh="地图与编辑器" data-lang-en="Map and Editor">Map and Editor</h3>
+                <ul>
+                    <li data-lang-zh="开始驾驶前，先在大地图上确认路线。" data-lang-en="Before driving, review the route on the large map.">Before driving, review the route on the large map.</li>
+                    <li data-lang-zh="在编辑器里选择墙、路、起点或终点，然后拖动网格即可绘制。" data-lang-en="In the editor, choose Wall, Path, Start, or Goal, then drag across the grid to draw.">In the editor, choose Wall, Path, Start, or Goal, then drag across the grid to draw.</li>
+                    <li data-lang-zh="保存自定义地图后，可从自定义模式中游玩。" data-lang-en="After saving a custom map, play it from Custom Mode.">After saving a custom map, play it from Custom Mode.</li>
+                </ul>
+            </div>
+            <button id="close-manual-btn" data-lang-zh="返回" data-lang-en="Back">Back</button>
         </div>
     </div>
     
@@ -103,8 +124,8 @@
             <div class="settings-group">
                 <label for="language-select" data-lang-zh="语言" data-lang-en="Language">语言</label>
                 <select id="language-select">
+                    <option value="en" selected>English</option>
                     <option value="zh">中文</option>
-                    <option value="en">English</option>
                 </select>
             </div>
             <div class="settings-group">

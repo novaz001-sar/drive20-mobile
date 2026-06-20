@@ -218,19 +218,18 @@ canvas {
 
 #mobile-drive-controls {
     position: fixed;
-    left: 50%;
+    left: auto;
+    right: max(8px, env(safe-area-inset-right));
     bottom: max(8px, env(safe-area-inset-bottom));
-    transform: translateX(-50%);
-    width: min(96vw, 560px);
+    transform: none;
+    width: auto;
     display: none;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
-    gap: 6px;
-    padding: 6px;
-    border: 2px solid rgba(15, 118, 110, 0.75);
-    border-radius: 8px;
-    background: rgba(255, 255, 255, 0.82);
-    backdrop-filter: blur(10px);
-    box-shadow: 0 8px 22px rgba(17, 24, 39, 0.2);
+    grid-template-columns: 1fr;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
     z-index: 34;
     pointer-events: auto;
     user-select: none;
@@ -238,18 +237,19 @@ canvas {
 }
 
 .mobile-drive-btn {
-    min-height: 54px;
+    min-width: 76px;
+    min-height: 52px;
     border: 0;
     border-radius: 8px;
     color: #ffffff;
-    background: var(--primary-color);
-    font-size: 20px;
+    background: #334155;
+    font-size: 18px;
     font-weight: 900;
     letter-spacing: 0;
-    box-shadow: 0 4px 0 rgba(17, 24, 39, 0.22);
+    box-shadow: 0 4px 0 rgba(15, 23, 42, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.24);
     touch-action: manipulation;
     box-sizing: border-box;
-    padding: 0 4px;
+    padding: 0 12px;
     white-space: nowrap;
 }
 
@@ -262,8 +262,8 @@ canvas {
 
 .mobile-drive-btn.quiet,
 .mobile-drive-btn.menu {
-    min-height: 54px;
-    background: var(--quiet-color);
+    min-height: 52px;
+    background: #334155;
     font-size: 18px;
 }
 
@@ -283,6 +283,10 @@ canvas {
 .mobile-drive-btn:disabled {
     opacity: 0.55;
     transform: none;
+}
+
+body.driving-compact-ui {
+    touch-action: none;
 }
 
 
@@ -627,11 +631,14 @@ canvas {
     border: 2px solid var(--primary-color);
     background-color: #e9ecef;
     position: relative; /* For waypoint numbers */
+    touch-action: none;
+    user-select: none;
 }
 .editor-cell {
     border: 1px solid #dee2e6;
-    transition: background-color: 0.1s;
+    transition: background-color 0.1s;
     position: relative;
+    touch-action: none;
 }
 .editor-cell:hover {
     background-color: #ced4da;
@@ -683,6 +690,35 @@ canvas {
     margin: 0;
     opacity: 0;
     animation: fadeIn 0.5s forwards;
+}
+
+.manual-content {
+    text-align: left;
+}
+
+.manual-content h2,
+.manual-content button {
+    text-align: center;
+}
+
+.manual-section {
+    margin: 14px 0 18px;
+}
+
+.manual-section h3 {
+    margin: 0 0 8px;
+    color: var(--primary-color);
+    font-size: 22px;
+}
+
+.manual-section ul {
+    margin: 0;
+    padding-left: 1.2em;
+}
+
+.manual-section li {
+    margin: 8px 0;
+    line-height: 1.45;
 }
 
 @keyframes fadeIn {
@@ -811,7 +847,7 @@ canvas {
     }
 
     #bottom-hud {
-        bottom: calc(82px + env(safe-area-inset-bottom));
+        bottom: calc(58px + env(safe-area-inset-bottom));
         padding-left: 12px;
         padding-right: 12px;
     }
@@ -952,23 +988,21 @@ canvas {
 
 @media (max-height: 520px) and (pointer: coarse) {
     #mobile-drive-controls {
-        width: min(96vw, 620px);
-        grid-template-columns: repeat(5, 1fr);
-        padding: 5px;
-        gap: 5px;
+        right: max(6px, env(safe-area-inset-right));
+        bottom: max(6px, env(safe-area-inset-bottom));
     }
 
     .mobile-drive-btn,
     .mobile-drive-btn.primary,
     .mobile-drive-btn.quiet,
     .mobile-drive-btn.menu {
-        min-height: 48px;
-        font-size: 18px;
-        grid-column: auto;
+        min-width: 68px;
+        min-height: 46px;
+        font-size: 16px;
     }
 
     #bottom-hud {
-        bottom: calc(64px + env(safe-area-inset-bottom));
+        bottom: calc(48px + env(safe-area-inset-bottom));
     }
 
     #minimap-container.small-map {

@@ -60,6 +60,13 @@ let previousGridPos = null;
 
 const keyState = { 'a': false, 'd': false, 'e': false, 'w': false, 'escape': false };
 let keyDebounce = false;
+const gestureState = {
+    pointerId: null,
+    startX: 0,
+    startY: 0,
+    active: false
+};
+const GESTURE_MIN_DISTANCE = 34;
 
 let wallMaterialN, wallMaterialS, wallMaterialE, wallMaterialW, floorMaterial, landmarkMaterial, goalWallMaterial;
 let hemisphereLight, dirLight;
@@ -68,7 +75,7 @@ let customLevels = [];
 let luckyCatArm, luckyCatWrist, floatingHeart;
 let helveticaFont = null;
 
-let currentLanguage = 'zh';
+let currentLanguage = 'en';
 let promptTimeout;
 let hintTimeout;
 let currentEditorMode = 'custom';
@@ -254,6 +261,7 @@ function startDrivingFromBigMap() {
 
     document.getElementById('big-map-view-modal').style.display = 'none';
     document.getElementById('view-toggle-container').style.display = 'none';
+    document.getElementById('third-person-controls').style.display = 'none';
     document.body.appendChild(minimapContainer);
     minimapContainer.classList.remove('big-map');
     minimapContainer.classList.add('small-map');
@@ -305,6 +313,74 @@ function syncMobileDriveControls() {
         const action = button.dataset.action;
         button.disabled = visible && action !== 'pause' && gameState !== 'AT_INTERSECTION';
     });
+}
+
+function isDrivingGestureEnabled() {
+    return ['AT_INTERSECTION', 'DRIVING', 'TURNING'].includes(gameState);
+}
+
+function isGestureBlockedTarget(target) {
+    if (!(target instanceof Element)) return false;
+    return Boolean(target.closest([
+        'button',
+        'input',
+        'select',
+        'textarea',
+        'label',
+        'a',
+        '.modal-overlay',
+        '#minimap-container',
+        '#show-minimap-btn',
+        '#settings-button',
+        '#view-toggle-container',
+        '#third-person-controls',
+        '#mobile-drive-controls',
+        '#dev-panel'
+    ].join(',')));
+}
+
+function resetGestureState() {
+    gestureState.pointerId = null;
+    gestureState.startX = 0;
+    gestureState.startY = 0;
+    gestureState.active = false;
+}
+
+function setupGestureControls() {
+    document.addEventListener('pointerdown', (event) => {
+        if (!isDrivingGestureEnabled() || gestureState.pointerId !== null || isGestureBlockedTarget(event.target)) return;
+        if (event.pointerType === 'mouse' && event.button !== 0) return;
+
+        gestureState.pointerId = event.pointerId;
+        gestureState.startX = event.clientX;
+        gestureState.startY = event.clientY;
+        gestureState.active = true;
+        event.preventDefault();
+    }, { passive: false });
+
+    document.addEventListener('pointermove', (event) => {
+        if (!gestureState.active || event.pointerId !== gestureState.pointerId) return;
+        event.preventDefault();
+    }, { passive: false });
+
+    const finishGesture = (event) => {
+        if (!gestureState.active || event.pointerId !== gestureState.pointerId) return;
+        event.preventDefault();
+
+        const dx = event.clientX - gestureState.startX;
+        const dy = event.clientY - gestureState.startY;
+        resetGestureState();
+
+        if (Math.hypot(dx, dy) < GESTURE_MIN_DISTANCE) return;
+
+        const action = Math.abs(dx) > Math.abs(dy)
+            ? (dx > 0 ? 'right' : 'left')
+            : (dy > 0 ? 'back' : 'forward');
+        handleDriveAction(action);
+    };
+
+    document.addEventListener('pointerup', finishGesture, { passive: false });
+    document.addEventListener('pointercancel', resetGestureState);
 }
 
 function setupUI() {
@@ -369,6 +445,13 @@ function setupUI() {
     setupMenuInfo('editor-mode-btn', 'main-menu-info-box', 'desc_editor');
 
     document.getElementById('free-mode-btn').addEventListener('click', showFreeModeLevelSelect);
+    document.getElementById('manual-btn').addEventListener('click', () => {
+        document.getElementById('main-menu-info-box').innerHTML = '';
+        document.getElementById('manual-modal').style.display = 'flex';
+    });
+    document.getElementById('close-manual-btn').addEventListener('click', () => {
+        document.getElementById('manual-modal').style.display = 'none';
+    });
     
     document.getElementById('editor-mode-btn').addEventListener('click', () => showEditor());
     document.getElementById('custom-mode-btn').addEventListener('click', () => {
@@ -421,6 +504,7 @@ function setupUI() {
             handleDriveAction(button.dataset.action);
         });
     });
+    setupGestureControls();
 
 
     
@@ -2167,10 +2251,23 @@ function initEditor(slotIndex = 0) {
             redrawEditorGrid();
         }
     };
-    grid.onmousedown = (e) => { editorState.isDrawing = true; handleGridInteraction(e); };
-    grid.onmouseover = handleGridInteraction;
-    document.onmouseup = () => editorState.isDrawing = false;
-    grid.onmouseleave = () => editorState.isDrawing = false;
+    const stopDrawing = () => { editorState.isDrawing = false; };
+    grid.onpointerdown = (e) => {
+        if (e.pointerType === 'mouse' && e.button !== 0) return;
+        editorState.isDrawing = true;
+        grid.setPointerCapture?.(e.pointerId);
+        handleGridInteraction(e, true);
+        e.preventDefault();
+    };
+    grid.onpointermove = (e) => handleGridInteraction(e);
+    grid.onpointerup = (e) => {
+        if (grid.hasPointerCapture?.(e.pointerId)) {
+            grid.releasePointerCapture(e.pointerId);
+        }
+        stopDrawing();
+    };
+    grid.onpointercancel = stopDrawing;
+    document.onpointerup = stopDrawing;
 
     document.getElementById('editor-tools').onclick = (e) => {
         if (e.target.tagName === 'BUTTON') {
@@ -2263,9 +2360,12 @@ function redrawEditorGrid() {
     }
 }
 
-function handleGridInteraction(e) {
-    if (!editorState.isDrawing || e.buttons !== 1) return;
-    const cell = e.target.closest('.editor-cell');
+function handleGridInteraction(e, force = false) {
+    if (!editorState.isDrawing && !force) return;
+    if (!force && e.pointerType === 'mouse' && e.buttons !== 1) return;
+
+    const elementAtPoint = document.elementFromPoint(e.clientX, e.clientY);
+    const cell = elementAtPoint?.closest?.('.editor-cell') || e.target.closest?.('.editor-cell');
     if (!cell) return;
     const x = parseInt(cell.dataset.x), z = parseInt(cell.dataset.z);
     const isStart = editorState.start.x === x && editorState.start.z === z;
