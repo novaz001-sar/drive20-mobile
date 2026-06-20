@@ -79,7 +79,7 @@ let currentLanguage = 'en';
 let promptTimeout;
 let hintTimeout;
 let currentEditorMode = 'custom';
-const DEFAULT_FLOOR_TEXTURE_URL = './src/assets/floor-cell.png';
+const DEFAULT_FLOOR_TEXTURE_URL = './src/assets/floor-cell.png?v=20260620-2';
 
 // Texture customization variables
 let textureURLs = { floor: null, wallN: null, wallS: null, wallE: null, wallW: null };
@@ -595,14 +595,19 @@ document.getElementById('settings-button').addEventListener('click', () => {
 
         const newURL = URL.createObjectURL(file);
         previewElement.style.backgroundImage = `url(${newURL})`;
-        
-        const texture = textureLoader.load(newURL);
-        texture.wrapS = THREE.RepeatWrapping;
-        texture.wrapT = THREE.RepeatWrapping;
 
-        material.map = texture;
-        material.color.set(0xffffff); // Set to white to show full texture color
-        material.needsUpdate = true;
+        textureLoader.load(
+            newURL,
+            (texture) => {
+                configureRepeatingTexture(texture);
+                material.map = texture;
+                material.color.set(0xffffff); // Set to white to show full texture color
+                material.needsUpdate = true;
+                updateTextureScales();
+            },
+            undefined,
+            (error) => console.warn(`Texture failed to load: ${newURL}`, error)
+        );
         
         return newURL;
     };
@@ -1680,15 +1685,33 @@ function getCssColor(variableName, fallbackColor) {
     return new THREE.Color(value || fallbackColor);
 }
 
-function createDefaultFloorTexture() {
-    const texture = new THREE.TextureLoader().load(DEFAULT_FLOOR_TEXTURE_URL, () => {
-        texture.needsUpdate = true;
-    });
+function configureRepeatingTexture(texture) {
     texture.colorSpace = THREE.SRGBColorSpace;
     texture.wrapS = THREE.RepeatWrapping;
     texture.wrapT = THREE.RepeatWrapping;
     texture.anisotropy = renderer ? Math.min(4, renderer.capabilities.getMaxAnisotropy()) : 1;
     return texture;
+}
+
+function loadTextureIntoMaterial(url, material, { onErrorColor = null } = {}) {
+    const loader = new THREE.TextureLoader();
+    loader.load(
+        url,
+        (texture) => {
+            configureRepeatingTexture(texture);
+            material.map = texture;
+            material.color.set(0xffffff);
+            material.needsUpdate = true;
+            updateTextureScales();
+        },
+        undefined,
+        (error) => {
+            console.warn(`Texture failed to load: ${url}`, error);
+            material.map = null;
+            if (onErrorColor !== null) material.color.set(onErrorColor);
+            material.needsUpdate = true;
+        }
+    );
 }
 
 function createSatinMetalMaterial(color, options = {}) {
@@ -1816,14 +1839,14 @@ function createMaterials() {
     wallMaterialE = createSatinMetalMaterial(getCssColor('--wall-color-e', '#c89b3c'), wallOptions);
     wallMaterialW = createSatinMetalMaterial(getCssColor('--wall-color-w', '#b35b6a'), wallOptions);
 
-    floorMaterial = createSatinMetalMaterial(0xffffff, {
-        map: createDefaultFloorTexture(),
+    floorMaterial = createSatinMetalMaterial(0xf1d6dc, {
         metalness: 0.28,
         roughness: 0.34,
         clearcoat: 0.28,
         clearcoatRoughness: 0.18,
         envMapIntensity: 0.58
     });
+    loadTextureIntoMaterial(DEFAULT_FLOOR_TEXTURE_URL, floorMaterial, { onErrorColor: 0xf1d6dc });
 
     landmarkMaterial = new THREE.MeshBasicMaterial({ color: new THREE.Color(getComputedStyle(document.body).getPropertyValue('--landmark-color').trim()), transparent: true, blending: THREE.AdditiveBlending });
     
