@@ -79,6 +79,7 @@ let currentLanguage = 'en';
 let promptTimeout;
 let hintTimeout;
 let currentEditorMode = 'custom';
+const DEFAULT_FLOOR_TEXTURE_URL = './src/assets/floor-cell.png';
 
 // Texture customization variables
 let textureURLs = { floor: null, wallN: null, wallS: null, wallE: null, wallW: null };
@@ -1679,63 +1680,14 @@ function getCssColor(variableName, fallbackColor) {
     return new THREE.Color(value || fallbackColor);
 }
 
-function mixColor(color, target, amount) {
-    return color.clone().lerp(new THREE.Color(target), amount).getStyle();
-}
-
-function createFloorGuideTexture(baseColor) {
-    const canvas = document.createElement('canvas');
-    canvas.width = 256;
-    canvas.height = 256;
-    const ctx = canvas.getContext('2d');
-
-    const dark = mixColor(baseColor, 0x1f2937, 0.26);
-    const mid = baseColor.getStyle();
-    const light = mixColor(baseColor, 0xffffff, 0.26);
-    const warmLight = mixColor(baseColor, 0xf2c879, 0.24);
-
-    const plateGradient = ctx.createLinearGradient(0, 0, 256, 256);
-    plateGradient.addColorStop(0, light);
-    plateGradient.addColorStop(0.5, mid);
-    plateGradient.addColorStop(1, dark);
-    ctx.fillStyle = plateGradient;
-    ctx.fillRect(0, 0, 256, 256);
-
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.22)';
-    ctx.lineWidth = 2;
-    for (let i = -256; i < 512; i += 28) {
-        ctx.beginPath();
-        ctx.moveTo(i, 0);
-        ctx.lineTo(i + 128, 256);
-        ctx.stroke();
-    }
-
-    ctx.strokeStyle = 'rgba(15, 23, 42, 0.34)';
-    ctx.lineWidth = 8;
-    ctx.strokeRect(4, 4, 248, 248);
-
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.28)';
-    ctx.lineWidth = 3;
-    ctx.strokeRect(17, 17, 222, 222);
-
-    ctx.fillStyle = warmLight;
-    for (let y = 30; y < 256; y += 58) {
-        ctx.fillRect(114, y, 28, 24);
-    }
-    for (let x = 30; x < 256; x += 58) {
-        ctx.fillRect(x, 114, 24, 28);
-    }
-
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.18)';
-    ctx.fillRect(0, 126, 256, 4);
-    ctx.fillRect(126, 0, 4, 256);
-
-    const texture = new THREE.CanvasTexture(canvas);
+function createDefaultFloorTexture() {
+    const texture = new THREE.TextureLoader().load(DEFAULT_FLOOR_TEXTURE_URL, () => {
+        texture.needsUpdate = true;
+    });
     texture.colorSpace = THREE.SRGBColorSpace;
     texture.wrapS = THREE.RepeatWrapping;
     texture.wrapT = THREE.RepeatWrapping;
     texture.anisotropy = renderer ? Math.min(4, renderer.capabilities.getMaxAnisotropy()) : 1;
-    texture.needsUpdate = true;
     return texture;
 }
 
@@ -1864,14 +1816,13 @@ function createMaterials() {
     wallMaterialE = createSatinMetalMaterial(getCssColor('--wall-color-e', '#c89b3c'), wallOptions);
     wallMaterialW = createSatinMetalMaterial(getCssColor('--wall-color-w', '#b35b6a'), wallOptions);
 
-    const floorBaseColor = getCssColor('--floor-color', '#6f828b');
     floorMaterial = createSatinMetalMaterial(0xffffff, {
-        map: createFloorGuideTexture(floorBaseColor),
-        metalness: 0.34,
-        roughness: 0.38,
-        clearcoat: 0.22,
-        clearcoatRoughness: 0.2,
-        envMapIntensity: 0.62
+        map: createDefaultFloorTexture(),
+        metalness: 0.28,
+        roughness: 0.34,
+        clearcoat: 0.28,
+        clearcoatRoughness: 0.18,
+        envMapIntensity: 0.58
     });
 
     landmarkMaterial = new THREE.MeshBasicMaterial({ color: new THREE.Color(getComputedStyle(document.body).getPropertyValue('--landmark-color').trim()), transparent: true, blending: THREE.AdditiveBlending });
