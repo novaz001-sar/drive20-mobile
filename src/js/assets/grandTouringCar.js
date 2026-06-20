@@ -15,6 +15,16 @@ function physicalMaterial(color, options = {}) {
     });
 }
 
+function glowMaterial(color, opacity = 0.7) {
+    return new THREE.MeshBasicMaterial({
+        color,
+        transparent: true,
+        opacity,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
+    });
+}
+
 function createBodyShellGeometry(tileSize) {
     const length = tileSize * 0.72;
     const stations = [
@@ -170,16 +180,22 @@ function createWheelAssembly(tileSize, side, z, materials) {
     return wheelGroup;
 }
 
-function createHeadlight(side, tileSize, material) {
+function createHeadlight(side, tileSize, materials) {
     const group = new THREE.Group();
     group.position.set(side * tileSize * 0.083, tileSize * 0.103, tileSize * 0.366);
     group.rotation.z = side * THREE.MathUtils.degToRad(8);
-    const blade = new THREE.Mesh(new THREE.BoxGeometry(tileSize * 0.112, tileSize * 0.013, tileSize * 0.010), material);
+    const blade = new THREE.Mesh(new THREE.BoxGeometry(tileSize * 0.112, tileSize * 0.013, tileSize * 0.010), materials.headlight);
     blade.position.x = side * tileSize * 0.036;
     group.add(blade);
-    const inner = new THREE.Mesh(new THREE.BoxGeometry(tileSize * 0.035, tileSize * 0.010, tileSize * 0.012), material);
+    const halo = new THREE.Mesh(new THREE.PlaneGeometry(tileSize * 0.15, tileSize * 0.042), materials.headlightGlow);
+    halo.position.set(side * tileSize * 0.030, 0, tileSize * 0.006);
+    group.add(halo);
+    const inner = new THREE.Mesh(new THREE.BoxGeometry(tileSize * 0.035, tileSize * 0.010, tileSize * 0.012), materials.headlight);
     inner.position.x = -side * tileSize * 0.034;
     group.add(inner);
+    const lamp = new THREE.PointLight(0xeaf9ff, 0.85, tileSize * 0.95, 1.7);
+    lamp.position.set(side * tileSize * 0.04, 0.01, tileSize * 0.12);
+    group.add(lamp);
     return group;
 }
 
@@ -201,19 +217,27 @@ export function createGrandTouringCarAsset({ tileSize = 10 } = {}) {
     car.name = 'grandTouringCarAsset';
 
     const materials = {
-        body: physicalMaterial(0x7b1021, {
+        body: physicalMaterial(0xd7194c, {
             metalness: 0.72,
-            roughness: 0.18,
+            roughness: 0.16,
             clearcoat: 0.92,
             clearcoatRoughness: 0.08,
-            emissive: 0x140008,
-            emissiveIntensity: 0.04
+            emissive: 0x2d0010,
+            emissiveIntensity: 0.08
         }),
-        bodyDark: physicalMaterial(0x2b0710, {
+        bodyAccent: physicalMaterial(0xff4f79, {
             metalness: 0.64,
-            roughness: 0.22,
-            clearcoat: 0.72,
-            clearcoatRoughness: 0.14
+            roughness: 0.18,
+            clearcoat: 0.86,
+            clearcoatRoughness: 0.09,
+            emissive: 0x23000b,
+            emissiveIntensity: 0.05
+        }),
+        champagne: physicalMaterial(0xf5c76b, {
+            metalness: 0.82,
+            roughness: 0.17,
+            clearcoat: 0.58,
+            clearcoatRoughness: 0.09
         }),
         glass: physicalMaterial(0x06111f, {
             metalness: 0.28,
@@ -232,7 +256,7 @@ export function createGrandTouringCarAsset({ tileSize = 10 } = {}) {
             clearcoat: 0.55,
             clearcoatRoughness: 0.08
         }),
-        grille: physicalMaterial(0x05070a, {
+        grille: physicalMaterial(0x1d0b13, {
             metalness: 0.74,
             roughness: 0.28,
             clearcoat: 0.42
@@ -240,15 +264,17 @@ export function createGrandTouringCarAsset({ tileSize = 10 } = {}) {
         tire: new THREE.MeshStandardMaterial({ color: 0x050505, roughness: 0.72, metalness: 0.05 }),
         rim: physicalMaterial(0xbfc7d5, { metalness: 0.92, roughness: 0.18, clearcoat: 0.35 }),
         brake: new THREE.MeshStandardMaterial({ color: 0x171717, roughness: 0.55, metalness: 0.35 }),
-        headlight: new THREE.MeshBasicMaterial({ color: 0xeaf9ff, transparent: true, opacity: 0.94 }),
-        tail: new THREE.MeshBasicMaterial({ color: 0xff1c3d, transparent: true, opacity: 0.9 })
+        headlight: glowMaterial(0xf8fdff, 0.96),
+        headlightGlow: glowMaterial(0x8ee7ff, 0.38),
+        tail: glowMaterial(0xff315c, 0.94),
+        tailGlow: glowMaterial(0xff86a0, 0.35)
     };
 
     const shell = new THREE.Mesh(createBodyShellGeometry(tileSize), materials.body);
     shell.name = 'grandTouringBodyShell';
     car.add(shell);
 
-    const underbody = new THREE.Mesh(new THREE.BoxGeometry(tileSize * 0.305, tileSize * 0.040, tileSize * 0.620), materials.grille);
+    const underbody = new THREE.Mesh(new THREE.BoxGeometry(tileSize * 0.268, tileSize * 0.032, tileSize * 0.575), materials.bodyAccent);
     underbody.position.y = tileSize * 0.035;
     underbody.name = 'grandTouringUnderbody';
     car.add(underbody);
@@ -257,12 +283,12 @@ export function createGrandTouringCarAsset({ tileSize = 10 } = {}) {
     cabin.name = 'grandTouringGlassCabin';
     car.add(cabin);
 
-    const roofSpine = createDetailBar(tileSize * 0.056, tileSize * 0.014, tileSize * 0.285, materials.bodyDark, 0, tileSize * 0.203, -tileSize * 0.018);
+    const roofSpine = createDetailBar(tileSize * 0.042, tileSize * 0.010, tileSize * 0.228, materials.champagne, 0, tileSize * 0.206, -tileSize * 0.018);
     roofSpine.name = 'grandTouringRoofSpine';
     car.add(roofSpine);
 
     for (const x of [-tileSize * 0.047, tileSize * 0.047]) {
-        const hoodCrease = createDetailBar(tileSize * 0.010, tileSize * 0.010, tileSize * 0.265, materials.bodyDark, x, tileSize * 0.132, tileSize * 0.210);
+        const hoodCrease = createDetailBar(tileSize * 0.006, tileSize * 0.008, tileSize * 0.190, materials.champagne, x, tileSize * 0.134, tileSize * 0.230);
         hoodCrease.rotation.x = THREE.MathUtils.degToRad(-4);
         hoodCrease.name = 'grandTouringHoodCrease';
         car.add(hoodCrease);
@@ -285,8 +311,8 @@ export function createGrandTouringCarAsset({ tileSize = 10 } = {}) {
     crest.name = 'grandTouringCenterBlade';
     car.add(crest);
 
-    car.add(createHeadlight(-1, tileSize, materials.headlight));
-    car.add(createHeadlight(1, tileSize, materials.headlight));
+    car.add(createHeadlight(-1, tileSize, materials));
+    car.add(createHeadlight(1, tileSize, materials));
 
     const lowerMouth = createDetailBar(tileSize * 0.252, tileSize * 0.020, tileSize * 0.012, materials.grille, 0, tileSize * 0.052, frontZ + tileSize * 0.012);
     lowerMouth.name = 'grandTouringLowerIntake';
@@ -305,19 +331,17 @@ export function createGrandTouringCarAsset({ tileSize = 10 } = {}) {
             car.add(arch);
         }
 
-        const rocker = createDetailBar(tileSize * 0.009, tileSize * 0.018, tileSize * 0.495, materials.chrome, side * tileSize * 0.178, tileSize * 0.060, -tileSize * 0.010);
+        const rocker = createDetailBar(tileSize * 0.007, tileSize * 0.014, tileSize * 0.430, materials.champagne, side * tileSize * 0.177, tileSize * 0.060, -tileSize * 0.020);
         rocker.name = 'grandTouringSideRocker';
         car.add(rocker);
 
         for (let i = 0; i < 3; i++) {
-            const vent = createDetailBar(tileSize * 0.006, tileSize * 0.012, tileSize * 0.050, materials.grille, side * tileSize * 0.183, tileSize * (0.105 + i * 0.017), tileSize * 0.102);
-            vent.rotation.y = side * Math.PI / 2;
+            const vent = createDetailBar(tileSize * 0.005, tileSize * 0.010, tileSize * 0.040, materials.champagne, side * tileSize * 0.183, tileSize * (0.105 + i * 0.016), tileSize * 0.102);
             vent.name = 'grandTouringSideVent';
             car.add(vent);
         }
 
-        const shoulderLine = createDetailBar(tileSize * 0.006, tileSize * 0.010, tileSize * 0.430, materials.bodyDark, side * tileSize * 0.164, tileSize * 0.123, -tileSize * 0.025);
-        shoulderLine.rotation.y = side * Math.PI / 2;
+        const shoulderLine = createDetailBar(tileSize * 0.004, tileSize * 0.007, tileSize * 0.340, materials.bodyAccent, side * tileSize * 0.163, tileSize * 0.124, -tileSize * 0.035);
         shoulderLine.name = 'grandTouringShoulderLine';
         car.add(shoulderLine);
 
@@ -327,12 +351,21 @@ export function createGrandTouringCarAsset({ tileSize = 10 } = {}) {
         tailLight.rotation.z = -side * THREE.MathUtils.degToRad(8);
         tailLight.name = 'grandTouringTailLight';
         car.add(tailLight);
+        const tailGlow = new THREE.Mesh(new THREE.PlaneGeometry(tileSize * 0.120, tileSize * 0.044), materials.tailGlow);
+        tailGlow.position.set(side * tileSize * 0.065, tileSize * 0.103, -tileSize * 0.372);
+        tailGlow.rotation.z = tailLight.rotation.z;
+        tailGlow.name = 'grandTouringTailGlow';
+        car.add(tailGlow);
     }
 
-    const rearLip = createDetailBar(tileSize * 0.265, tileSize * 0.022, tileSize * 0.030, materials.bodyDark, 0, tileSize * 0.126, -tileSize * 0.366);
+    const rearLip = createDetailBar(tileSize * 0.235, tileSize * 0.018, tileSize * 0.024, materials.bodyAccent, 0, tileSize * 0.126, -tileSize * 0.366);
     rearLip.rotation.x = THREE.MathUtils.degToRad(7);
     rearLip.name = 'grandTouringRearLip';
     car.add(rearLip);
+
+    const rearLamp = new THREE.PointLight(0xff315c, 0.46, tileSize * 0.82, 1.8);
+    rearLamp.position.set(0, tileSize * 0.105, -tileSize * 0.420);
+    car.add(rearLamp);
 
     car.traverse(child => {
         if (child.isMesh) {
