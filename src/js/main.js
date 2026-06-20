@@ -103,6 +103,21 @@ THREE.Cache.enabled = true;
 // Texture customization variables
 let textureURLs = { floor: null, wallN: null, wallS: null, wallE: null, wallW: null };
 let textureScales = { floor: 1, wall: 1 };
+const audioSettings = {
+    enabled: true,
+    volume: 0.75
+};
+let audioContext = null;
+let audioMasterGain = null;
+let audioNoiseBuffer = null;
+try {
+    const savedSoundEnabled = localStorage.getItem('drive_sound_enabled_v1');
+    const savedSoundVolume = parseFloat(localStorage.getItem('drive_sound_volume_v1'));
+    if (savedSoundEnabled === 'off') audioSettings.enabled = false;
+    if (Number.isFinite(savedSoundVolume)) audioSettings.volume = Math.min(1, Math.max(0, savedSoundVolume));
+} catch (e) {
+    // Sound settings are optional when storage is unavailable.
+}
 
 // ====================================================================
 // 初始化函数 (Initialization)
@@ -372,6 +387,152 @@ function triggerGentleHaptic() {
     if (navigator.vibrate) navigator.vibrate(18);
 }
 
+function saveAudioSettings() {
+    try {
+        localStorage.setItem('drive_sound_enabled_v1', audioSettings.enabled ? 'on' : 'off');
+        localStorage.setItem('drive_sound_volume_v1', String(audioSettings.volume));
+    } catch (e) {
+        // Ignore storage failures; the current session still uses the selected values.
+    }
+}
+
+function updateSoundSettingsUI() {
+    const soundToggle = document.getElementById('sound-toggle');
+    const volumeSlider = document.getElementById('sound-volume-slider');
+    const volumeValue = document.getElementById('sound-volume-value');
+    if (soundToggle) soundToggle.value = audioSettings.enabled ? 'on' : 'off';
+    if (volumeSlider) volumeSlider.value = String(audioSettings.volume);
+    if (volumeValue) volumeValue.textContent = `${Math.round(audioSettings.volume * 100)}%`;
+}
+
+function openSettingsPanel() {
+    updateSoundSettingsUI();
+    const settingsPanel = document.getElementById('settings-panel');
+    if (settingsPanel) settingsPanel.style.display = 'flex';
+}
+
+function closeSettingsPanel() {
+    const settingsPanel = document.getElementById('settings-panel');
+    if (settingsPanel) settingsPanel.style.display = 'none';
+}
+
+function ensureAudioContext() {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) return null;
+    if (!audioContext) {
+        audioContext = new AudioContextClass();
+        audioMasterGain = audioContext.createGain();
+        audioMasterGain.gain.value = audioSettings.enabled ? audioSettings.volume : 0;
+        audioMasterGain.connect(audioContext.destination);
+    }
+    if (audioContext.state === 'suspended') {
+        audioContext.resume().catch(() => {});
+    }
+    return audioContext;
+}
+
+function updateAudioMasterGain() {
+    if (!audioMasterGain || !audioContext) return;
+    const now = audioContext.currentTime;
+    audioMasterGain.gain.cancelScheduledValues(now);
+    audioMasterGain.gain.setTargetAtTime(audioSettings.enabled ? audioSettings.volume : 0, now, 0.025);
+}
+
+function getAudioNoiseBuffer(ctx) {
+    if (audioNoiseBuffer && audioNoiseBuffer.sampleRate === ctx.sampleRate) return audioNoiseBuffer;
+    const length = Math.floor(ctx.sampleRate * 0.45);
+    audioNoiseBuffer = ctx.createBuffer(1, length, ctx.sampleRate);
+    const data = audioNoiseBuffer.getChannelData(0);
+    for (let i = 0; i < length; i++) {
+        data[i] = (Math.random() * 2 - 1) * (1 - i / length);
+    }
+    return audioNoiseBuffer;
+}
+
+function createSoundGain(ctx, startTime, duration, peak = 0.5, attack = 0.012, release = 0.12) {
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.0001, startTime);
+    gain.gain.exponentialRampToValueAtTime(Math.max(0.0002, peak), startTime + attack);
+    gain.gain.exponentialRampToValueAtTime(0.0001, startTime + Math.max(attack + 0.02, duration - release));
+    gain.gain.setValueAtTime(0.0001, startTime + duration);
+    gain.connect(audioMasterGain);
+    return gain;
+}
+
+function playTone({ frequency, endFrequency, duration, type = 'sine', peak = 0.35, startOffset = 0, pan = 0 }) {
+    const ctx = ensureAudioContext();
+    if (!ctx || !audioMasterGain || !audioSettings.enabled || audioSettings.volume <= 0) return;
+    const start = ctx.currentTime + startOffset;
+    const osc = ctx.createOscillator();
+    const gain = createSoundGain(ctx, start, duration, peak);
+    let destination = gain;
+    if (ctx.createStereoPanner) {
+        const panner = ctx.createStereoPanner();
+        panner.pan.setValueAtTime(pan, start);
+        panner.connect(gain);
+        destination = panner;
+    }
+    osc.type = type;
+    osc.frequency.setValueAtTime(frequency, start);
+    if (endFrequency) osc.frequency.exponentialRampToValueAtTime(Math.max(20, endFrequency), start + duration);
+    osc.connect(destination);
+    osc.start(start);
+    osc.stop(start + duration + 0.03);
+}
+
+function playNoiseBurst({ duration, peak = 0.25, startOffset = 0, filterFrequency = 900, pan = 0 }) {
+    const ctx = ensureAudioContext();
+    if (!ctx || !audioMasterGain || !audioSettings.enabled || audioSettings.volume <= 0) return;
+    const start = ctx.currentTime + startOffset;
+    const source = ctx.createBufferSource();
+    source.buffer = getAudioNoiseBuffer(ctx);
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(filterFrequency, start);
+    const gain = createSoundGain(ctx, start, duration, peak, 0.006, duration * 0.5);
+    let destination = filter;
+    if (ctx.createStereoPanner) {
+        const panner = ctx.createStereoPanner();
+        panner.pan.setValueAtTime(pan, start);
+        panner.connect(filter);
+        destination = panner;
+    }
+    source.connect(destination);
+    filter.connect(gain);
+    source.start(start);
+    source.stop(start + duration);
+}
+
+function playDriveSound(kind) {
+    if (!audioSettings.enabled || audioSettings.volume <= 0) return;
+    ensureAudioContext();
+    switch (kind) {
+        case 'forward':
+            playTone({ frequency: 150, endFrequency: 245, duration: 0.22, type: 'sawtooth', peak: 0.18 });
+            playTone({ frequency: 410, endFrequency: 620, duration: 0.16, type: 'triangle', peak: 0.10, startOffset: 0.02 });
+            playNoiseBurst({ duration: 0.12, peak: 0.06, filterFrequency: 1400 });
+            break;
+        case 'back':
+            playTone({ frequency: 260, endFrequency: 210, duration: 0.12, type: 'square', peak: 0.10 });
+            playTone({ frequency: 260, endFrequency: 210, duration: 0.12, type: 'square', peak: 0.10, startOffset: 0.17 });
+            playTone({ frequency: 92, endFrequency: 78, duration: 0.32, type: 'sine', peak: 0.12 });
+            break;
+        case 'left':
+            playTone({ frequency: 430, endFrequency: 350, duration: 0.17, type: 'triangle', peak: 0.14, pan: -0.65 });
+            playTone({ frequency: 220, endFrequency: 185, duration: 0.22, type: 'sine', peak: 0.08, pan: -0.45 });
+            break;
+        case 'right':
+            playTone({ frequency: 350, endFrequency: 430, duration: 0.17, type: 'triangle', peak: 0.14, pan: 0.65 });
+            playTone({ frequency: 185, endFrequency: 220, duration: 0.22, type: 'sine', peak: 0.08, pan: 0.45 });
+            break;
+        case 'wall':
+            playTone({ frequency: 92, endFrequency: 42, duration: 0.28, type: 'sine', peak: 0.36 });
+            playNoiseBurst({ duration: 0.20, peak: 0.26, filterFrequency: 520 });
+            playTone({ frequency: 170, endFrequency: 118, duration: 0.11, type: 'square', peak: 0.08, startOffset: 0.03 });
+            break;
+    }
+}
+
 function handleDriveAction(action) {
     if (action === 'pause') {
         togglePauseMenu();
@@ -387,9 +548,11 @@ function handleDriveAction(action) {
     if (action === 'right') {
         targetRotation.y -= Math.PI / 2;
         gameState = 'TURNING';
+        playDriveSound('right');
     } else if (action === 'left') {
         targetRotation.y += Math.PI / 2;
         gameState = 'TURNING';
+        playDriveSound('left');
     } else if (action === 'forward') {
         setupMove(1);
     } else if (action === 'back') {
@@ -485,6 +648,9 @@ function setupGestureControls() {
 }
 
 function setupUI() {
+    document.getElementById('settings-button')?.addEventListener('click', openSettingsPanel);
+    document.getElementById('close-settings-btn')?.addEventListener('click', closeSettingsPanel);
+
     document.getElementById('initial-language-select').addEventListener('change', (e) => {
         currentLanguage = e.target.value;
         updateUIText();
@@ -623,12 +789,23 @@ arrow3pToggle?.addEventListener('change', (e) => {
     if (gameState === 'AT_INTERSECTION') checkForTurns();
 });
 
-document.getElementById('settings-button').addEventListener('click', () => {
-        document.getElementById('settings-panel').style.display = 'flex';
-    });
-    document.getElementById('close-settings-btn').addEventListener('click', () => {
-        document.getElementById('settings-panel').style.display = 'none';
-    });
+const soundToggle = document.getElementById('sound-toggle');
+const soundVolumeSlider = document.getElementById('sound-volume-slider');
+updateSoundSettingsUI();
+soundToggle?.addEventListener('change', (e) => {
+    audioSettings.enabled = e.target.value === 'on';
+    if (audioSettings.enabled) ensureAudioContext();
+    updateAudioMasterGain();
+    saveAudioSettings();
+    updateSoundSettingsUI();
+});
+soundVolumeSlider?.addEventListener('input', (e) => {
+    audioSettings.volume = Math.min(1, Math.max(0, parseFloat(e.target.value) || 0));
+    updateAudioMasterGain();
+    saveAudioSettings();
+    updateSoundSettingsUI();
+});
+
     document.getElementById('font-size-slider').addEventListener('input', (e) => {
         document.body.style.fontSize = `calc(${getComputedStyle(document.body).getPropertyValue('--font-size-normal')} * ${e.target.value})`;
     });
@@ -1130,6 +1307,7 @@ showTemporaryMessage(translations[currentLanguage].prompt_near_goal, 2500);
 
     if (nextGridZ < 0 || nextGridZ >= level.grid.length || nextGridX < 0 || nextGridX >= level.grid[0].length || level.grid[nextGridZ][nextGridX] === 0) {
 cameraShake();
+playDriveSound('wall');
 showTemporaryMessage(translations[currentLanguage].prompt_wall);
     } else {
 previousGridPos = gridPos;
@@ -1140,6 +1318,7 @@ while (landmarksGroup.children.length > 0) {
 }
 targetPosition.copy(gridToWorld(nextGridX, nextGridZ, level.grid));
 gameState = 'DRIVING';
+playDriveSound(dir === 1 ? 'forward' : 'back');
     }
 }
 

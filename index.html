@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#0f766e">
     <title>Happy Drive Mobile</title>
     <link rel="preload" as="image" href="./src/assets/floor-cell-mobile-512.webp?v=20260620-4" type="image/webp" fetchpriority="high">
-    <link rel="stylesheet" href="./src/styles/main.css">
+    <link rel="stylesheet" href="./src/styles/main.css?v=20260620-sound">
 </head>
 <body>
     <div id="game-container"></div>
@@ -143,6 +143,18 @@
                     <option value="on" data-lang-zh="开启" data-lang-en="On">开启</option>
                     <option value="off" data-lang-zh="关闭" data-lang-en="Off">关闭</option>
                 </select>
+            </div>
+            <div class="settings-group sound-settings-group">
+                <label for="sound-toggle" data-lang-zh="音效" data-lang-en="Sound">Sound</label>
+                <select id="sound-toggle">
+                    <option value="on" data-lang-zh="开启" data-lang-en="On">On</option>
+                    <option value="off" data-lang-zh="关闭" data-lang-en="Off">Off</option>
+                </select>
+                <label for="sound-volume-slider" data-lang-zh="音量" data-lang-en="Volume">Volume</label>
+                <div class="range-with-value">
+                    <input type="range" id="sound-volume-slider" min="0" max="1" step="0.01" value="0.75">
+                    <output id="sound-volume-value" for="sound-volume-slider">75%</output>
+                </div>
             </div>
              
 <div class="settings-group">
@@ -338,6 +350,6 @@
             }
         }
     </script>
-    <script type="module" src="./src/js/main.js"></script>
+    <script type="module" src="./src/js/main.js?v=20260620-sound"></script>
 </body>
 </html>

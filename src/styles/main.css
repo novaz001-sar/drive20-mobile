@@ -548,6 +548,23 @@ body.driving-compact-ui {
     width: 100%;
 }
 
+.sound-settings-group label + select {
+    margin-bottom: 12px;
+}
+
+.range-with-value {
+    display: grid;
+    grid-template-columns: 1fr 52px;
+    gap: 12px;
+    align-items: center;
+}
+
+.range-with-value output {
+    font-weight: 800;
+    text-align: right;
+    color: var(--accent-color);
+}
+
 .texture-input-row {
     display: flex;
     align-items: center;
