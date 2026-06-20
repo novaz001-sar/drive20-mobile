@@ -97,6 +97,9 @@ let currentEditorMode = 'custom';
 const DEFAULT_FLOOR_TEXTURE_URL = './src/assets/floor-cell-mobile-512.webp?v=20260620-4';
 const FALLBACK_FLOOR_TEXTURE_URL = './src/assets/floor-cell.png?v=20260620-4';
 let defaultFloorTexturePromise = null;
+const AUDIO_MASTER_GAIN_MULTIPLIER = 2;
+const SOUND_ENABLED_STORAGE_KEY = 'drive_sound_enabled_v1';
+const SOUND_VOLUME_STORAGE_KEY = 'drive_sound_volume_v2';
 
 THREE.Cache.enabled = true;
 
@@ -105,15 +108,16 @@ let textureURLs = { floor: null, wallN: null, wallS: null, wallE: null, wallW: n
 let textureScales = { floor: 1, wall: 1 };
 const audioSettings = {
     enabled: true,
-    volume: 0.75
+    volume: 1
 };
 let audioContext = null;
 let audioMasterGain = null;
 let audioNoiseBuffer = null;
 let audioUnlockPromise = null;
+let lastWaypointSoundToken = null;
 try {
-    const savedSoundEnabled = localStorage.getItem('drive_sound_enabled_v1');
-    const savedSoundVolume = parseFloat(localStorage.getItem('drive_sound_volume_v1'));
+    const savedSoundEnabled = localStorage.getItem(SOUND_ENABLED_STORAGE_KEY);
+    const savedSoundVolume = parseFloat(localStorage.getItem(SOUND_VOLUME_STORAGE_KEY));
     if (savedSoundEnabled === 'off') audioSettings.enabled = false;
     if (Number.isFinite(savedSoundVolume)) audioSettings.volume = Math.min(1, Math.max(0, savedSoundVolume));
 } catch (e) {
@@ -390,8 +394,8 @@ function triggerGentleHaptic() {
 
 function saveAudioSettings() {
     try {
-        localStorage.setItem('drive_sound_enabled_v1', audioSettings.enabled ? 'on' : 'off');
-        localStorage.setItem('drive_sound_volume_v1', String(audioSettings.volume));
+        localStorage.setItem(SOUND_ENABLED_STORAGE_KEY, audioSettings.enabled ? 'on' : 'off');
+        localStorage.setItem(SOUND_VOLUME_STORAGE_KEY, String(audioSettings.volume));
     } catch (e) {
         // Ignore storage failures; the current session still uses the selected values.
     }
@@ -423,7 +427,7 @@ function ensureAudioContext() {
     if (!audioContext) {
         audioContext = new AudioContextClass();
         audioMasterGain = audioContext.createGain();
-        audioMasterGain.gain.value = audioSettings.enabled ? audioSettings.volume : 0;
+        audioMasterGain.gain.value = audioSettings.enabled ? audioSettings.volume * AUDIO_MASTER_GAIN_MULTIPLIER : 0;
         audioMasterGain.connect(audioContext.destination);
     }
     if (audioContext.state === 'suspended') {
@@ -478,7 +482,7 @@ function updateAudioMasterGain() {
     if (!audioMasterGain || !audioContext) return;
     const now = audioContext.currentTime;
     audioMasterGain.gain.cancelScheduledValues(now);
-    audioMasterGain.gain.setTargetAtTime(audioSettings.enabled ? audioSettings.volume : 0, now, 0.025);
+    audioMasterGain.gain.setTargetAtTime(audioSettings.enabled ? audioSettings.volume * AUDIO_MASTER_GAIN_MULTIPLIER : 0, now, 0.025);
 }
 
 function getAudioNoiseBuffer(ctx) {
@@ -595,6 +599,13 @@ function playDriveSound(kind) {
             playNoiseBurst({ duration: 0.18, peak: 0.045, filterFrequency: 3600, startOffset: 0.42 });
             break;
     }
+}
+
+function playWaypointFoundSound(waypointIndex = currentLevelState.nextWaypoint) {
+    const token = `${currentLevelIndex}:${selectedCustomMapIndex}:${waypointIndex}`;
+    if (lastWaypointSoundToken === token) return;
+    lastWaypointSoundToken = token;
+    playDriveSound('waypoint');
 }
 
 function handleDriveAction(action) {
@@ -1125,6 +1136,7 @@ function loadLevel(levelData) {
         nextWaypoint: 1,
         touchedHighlightFloors: new Set()
     };
+    lastWaypointSoundToken = null;
 
     createMazeMesh(level.grid, level.goal);
     placeRoadsideObjects(level.grid);
@@ -1221,7 +1233,7 @@ function afterMoveChecks() {
 
                 // Trigger enhanced firework effect
                 createFireworkEffect(collectedWaypointMesh.position, nextWpData.color);
-                playDriveSound('waypoint');
+                playWaypointFoundSound(currentLevelState.nextWaypoint);
                 
                 // Change appearance instead of hiding
                 const gem = collectedWaypointMesh.getObjectByName('waypoint_gem');
@@ -1377,6 +1389,10 @@ function setupMove(dir = 1) {
 
     const isGoalNext = (nextGridX === level.goal.x && nextGridZ === level.goal.z);
     const isGoalLocked = currentLevelState.isWaypointMode && currentLevelState.nextWaypoint <= currentLevelState.totalWaypoints;
+    const nextWaypointData = currentLevelState.isWaypointMode && currentLevelState.nextWaypoint <= currentLevelState.totalWaypoints
+        ? level.waypoints[currentLevelState.nextWaypoint - 1]
+        : null;
+    const isWaypointNext = nextWaypointData && nextGridX === nextWaypointData.x && nextGridZ === nextWaypointData.z;
 
     if (isGoalNext && !isGoalLocked) {
 showTemporaryMessage(translations[currentLanguage].prompt_near_goal, 2500);
@@ -1395,7 +1411,11 @@ while (landmarksGroup.children.length > 0) {
 }
 targetPosition.copy(gridToWorld(nextGridX, nextGridZ, level.grid));
 gameState = 'DRIVING';
-playDriveSound(dir === 1 ? 'forward' : 'back');
+if (isWaypointNext) {
+    playWaypointFoundSound(currentLevelState.nextWaypoint);
+} else {
+    playDriveSound(dir === 1 ? 'forward' : 'back');
+}
     }
 }
 
@@ -1438,20 +1458,20 @@ function animate() {
     const nightIntensity = Math.max(0, 1 - dayNightCycle * 3);
     activeLampLights.forEach(light => { light.intensity = nightIntensity * 5.5; });
     activeTechWallEffects.forEach(effect => {
-        const flow = (elapsedTime * effect.speed + effect.phase) % 1;
         const pulse = (Math.sin(elapsedTime * 4.8 + effect.phase * 8) + 1) / 2;
-        effect.auraMaterial.opacity = 0.12 + pulse * 0.22;
-        effect.railMaterials.forEach((material, index) => {
-            material.opacity = (index === 0 ? 0.68 : 0.5) + pulse * 0.26;
-        });
-        effect.gateMaterials.forEach((material, index) => {
-            const gatePulse = (Math.sin(elapsedTime * 7.2 + effect.phase * 5 + index * 0.8) + 1) / 2;
-            material.opacity = 0.26 + gatePulse * 0.58;
-        });
-        effect.pulse.position.x = -effect.travelDistance / 2 + flow * effect.travelDistance;
-        effect.pulse.scale.set(1.2 + pulse * 0.7, 0.62 + pulse * 0.24, 0.62 + pulse * 0.24);
-        effect.pulseMaterial.opacity = 0.58 + pulse * 0.42;
-        if (effect.light) effect.light.intensity = 0.18 + pulse * 0.78;
+        const floatOffset = Math.sin(elapsedTime * effect.floatSpeed + effect.phase) * effect.floatHeight;
+        effect.gem.position.y = effect.gemBaseY + floatOffset;
+        effect.gem.rotation.y += delta * effect.spinSpeed;
+        effect.gem.rotation.x = effect.baseRotationX + Math.sin(elapsedTime * 2.2 + effect.phase) * 0.12;
+        effect.aura.position.y = effect.auraBaseY + floatOffset * 0.45;
+        effect.halo.position.y = effect.haloBaseY + floatOffset * 0.62;
+        effect.auraMaterial.opacity = 0.18 + pulse * 0.26;
+        effect.haloMaterial.opacity = 0.34 + pulse * 0.34;
+        effect.gemMaterial.emissiveIntensity = 1.35 + pulse * 1.15;
+        if (effect.light) {
+            effect.light.position.y = effect.lightBaseY + floatOffset;
+            effect.light.intensity = 0.7 + pulse * 1.35;
+        }
     });
 
     // Object animations (Lucky Cat, Heart, Waypoints)
@@ -1687,101 +1707,103 @@ function createInstancedWallBatch(geometry, material, transforms) {
 
 function createTechWallEffect(transform, index, usePointLight) {
     const group = new THREE.Group();
-    group.position.set(transform.x, WALL_HEIGHT + 0.22, transform.z);
+    group.position.set(transform.x, WALL_HEIGHT + 0.32, transform.z);
     group.rotation.y = transform.rotationY;
 
     const primaryColor = index % 2 === 0 ? 0x00e5ff : 0xff2fd6;
-    const secondaryColor = index % 2 === 0 ? 0x8b5cf6 : 0x00e5ff;
-    const baseMaterial = new THREE.MeshBasicMaterial({
-        color: 0x06111f,
+    const secondaryColor = index % 2 === 0 ? 0x8b5cf6 : 0x22d3ee;
+    const metalMaterial = new THREE.MeshStandardMaterial({
+        color: 0xcbd5e1,
+        roughness: 0.28,
+        metalness: 0.82,
+        emissive: new THREE.Color(primaryColor).multiplyScalar(0.08)
+    });
+    const gemMaterial = new THREE.MeshStandardMaterial({
+        color: primaryColor,
+        emissive: primaryColor,
+        emissiveIntensity: 1.7,
+        roughness: 0.18,
+        metalness: 0.22,
         transparent: true,
-        opacity: 0.62,
-        depthWrite: false
+        opacity: 0.96
     });
     const auraMaterial = new THREE.MeshBasicMaterial({
         color: primaryColor,
         transparent: true,
-        opacity: 0.18,
+        opacity: 0.26,
         blending: THREE.AdditiveBlending,
+        side: THREE.DoubleSide,
         depthWrite: false
     });
-    const primaryMaterial = new THREE.MeshBasicMaterial({
-        color: primaryColor,
-        transparent: true,
-        opacity: 0.92,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false
-    });
-    const secondaryMaterial = new THREE.MeshBasicMaterial({
+    const haloMaterial = new THREE.MeshBasicMaterial({
         color: secondaryColor,
         transparent: true,
-        opacity: 0.74,
+        opacity: 0.5,
         blending: THREE.AdditiveBlending,
-        depthWrite: false
-    });
-    const pulseMaterial = new THREE.MeshBasicMaterial({
-        color: 0xf8fdff,
-        transparent: true,
-        opacity: 0.96,
-        blending: THREE.AdditiveBlending,
+        side: THREE.DoubleSide,
         depthWrite: false
     });
 
-    const aura = new THREE.Mesh(new THREE.PlaneGeometry(TILE_SIZE * 0.94, 0.74), auraMaterial);
-    aura.position.set(0, -0.22, 0.17);
-    aura.name = 'techWallAura';
+    const aura = new THREE.Mesh(new THREE.CircleGeometry(0.56, 32), auraMaterial);
+    aura.position.set(0, 0.02, 0.22);
+    aura.scale.set(1.25, 0.72, 1);
+    aura.name = 'floatingGemAura';
     group.add(aura);
 
-    const base = new THREE.Mesh(new THREE.BoxGeometry(TILE_SIZE * 0.88, 0.14, 0.16), baseMaterial);
-    base.position.set(0, 0.05, 0.1);
-    base.name = 'techWallDarkRail';
+    const base = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.42, 0.14, 6), metalMaterial);
+    base.rotation.x = Math.PI / 2;
+    base.position.set(0, -0.18, 0.13);
+    base.name = 'floatingGemSocket';
     group.add(base);
 
-    const upperRail = new THREE.Mesh(new THREE.BoxGeometry(TILE_SIZE * 0.76, 0.035, 0.06), primaryMaterial);
-    upperRail.position.set(0, 0.15, 0.2);
-    upperRail.name = 'techWallUpperRail';
-    group.add(upperRail);
+    const halo = new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.018, 8, 42), haloMaterial);
+    halo.position.set(0, 0.13, 0.25);
+    halo.name = 'floatingGemHalo';
+    group.add(halo);
 
-    const lowerRail = new THREE.Mesh(new THREE.BoxGeometry(TILE_SIZE * 0.72, 0.028, 0.05), secondaryMaterial);
-    lowerRail.position.set(0, -0.02, 0.21);
-    lowerRail.name = 'techWallLowerRail';
-    group.add(lowerRail);
+    const gem = new THREE.Mesh(new THREE.OctahedronGeometry(0.28, 1), gemMaterial);
+    gem.position.set(0, 0.16, 0.3);
+    gem.rotation.set(0.46, Math.PI / 4, 0.14);
+    gem.name = 'floatingGemLight';
+    group.add(gem);
 
-    const gateMaterials = [];
-    for (let i = 0; i < 5; i++) {
-        const gateMaterial = i % 2 === 0 ? primaryMaterial.clone() : secondaryMaterial.clone();
-        gateMaterial.opacity = 0.5;
-        const gate = new THREE.Mesh(new THREE.BoxGeometry(0.065, 0.34, 0.055), gateMaterial);
-        gate.position.set(-TILE_SIZE * 0.34 + i * TILE_SIZE * 0.17, 0.055, 0.23);
-        gate.name = 'techWallGate';
-        group.add(gate);
-        gateMaterials.push(gateMaterial);
-    }
-
-    const pulse = new THREE.Mesh(new THREE.SphereGeometry(0.18, 12, 8), pulseMaterial);
-    pulse.position.set(-TILE_SIZE * 0.38, 0.15, 0.28);
-    pulse.scale.set(1.45, 0.72, 0.72);
-    pulse.name = 'techWallPulseCore';
-    group.add(pulse);
+    const shine = new THREE.Mesh(new THREE.SphereGeometry(0.055, 12, 8), new THREE.MeshBasicMaterial({
+        color: 0xffffff,
+        transparent: true,
+        opacity: 0.82,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
+    }));
+    shine.position.set(-0.08, 0.27, 0.43);
+    shine.name = 'floatingGemSpark';
+    group.add(shine);
 
     let light = null;
     if (usePointLight) {
-        light = new THREE.PointLight(primaryColor, 0.65, TILE_SIZE * 1.6, 1.8);
-        light.position.set(0, 0.12, 0.34);
+        light = new THREE.PointLight(primaryColor, 1.6, TILE_SIZE * 1.9, 1.55);
+        light.position.set(0, 0.16, 0.44);
         group.add(light);
     }
 
     sceneryGroup.add(group);
     activeTechWallEffects.push({
+        group,
+        gem,
+        gemMaterial,
+        gemBaseY: gem.position.y,
+        baseRotationX: gem.rotation.x,
+        aura,
         auraMaterial,
-        railMaterials: [primaryMaterial, secondaryMaterial],
-        gateMaterials,
-        pulse,
-        pulseMaterial,
-        travelDistance: TILE_SIZE * 0.76,
+        auraBaseY: aura.position.y,
+        halo,
+        haloMaterial,
+        haloBaseY: halo.position.y,
         light,
+        lightBaseY: light ? light.position.y : 0,
         phase: index * 0.19,
-        speed: 0.34 + (index % 5) * 0.045
+        floatHeight: 0.11 + (index % 3) * 0.025,
+        floatSpeed: 1.7 + (index % 5) * 0.16,
+        spinSpeed: 0.85 + (index % 4) * 0.18
     });
 }
 

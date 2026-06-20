@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#0f766e">
     <title>Happy Drive Mobile</title>
     <link rel="preload" as="image" href="./src/assets/floor-cell-mobile-512.webp?v=20260620-4" type="image/webp" fetchpriority="high">
-    <link rel="stylesheet" href="./src/styles/main.css?v=20260620-sound">
+    <link rel="stylesheet" href="./src/styles/main.css?v=20260620-gem-audio">
 </head>
 <body>
     <div id="game-container"></div>
@@ -135,7 +135,7 @@
             </div>
             <div class="settings-group">
                 <label for="minimap-size-slider" data-lang-zh="小地图大小" data-lang-en="Minimap Size">小地图大小</label>
-                <input type="range" id="minimap-size-slider" min="1" max="2" step="0.01" value="1">
+                <input type="range" id="minimap-size-slider" min="1" max="2" step="0.01" value="2">
             </div>
             <div class="settings-group">
                 <label for="helper-text-toggle" data-lang-zh="辅助文字" data-lang-en="Helper Text">辅助文字</label>
@@ -152,8 +152,8 @@
                 </select>
                 <label for="sound-volume-slider" data-lang-zh="音量" data-lang-en="Volume">Volume</label>
                 <div class="range-with-value">
-                    <input type="range" id="sound-volume-slider" min="0" max="1" step="0.01" value="0.75">
-                    <output id="sound-volume-value" for="sound-volume-slider">75%</output>
+                    <input type="range" id="sound-volume-slider" min="0" max="1" step="0.01" value="1">
+                    <output id="sound-volume-value" for="sound-volume-slider">100%</output>
                 </div>
             </div>
              
@@ -350,6 +350,6 @@
             }
         }
     </script>
-    <script type="module" src="./src/js/main.js?v=20260620-audio-unlock"></script>
+    <script type="module" src="./src/js/main.js?v=20260620-gem-audio"></script>
 </body>
 </html>

@@ -18,7 +18,7 @@
     --font-size-normal: 20px;
     --font-size-large: 25px;
     --font-size-xlarge: 34px;
-    --minimap-scale: 1; /* 小地图缩放比例 */
+    --minimap-scale: 2; /* 小地图缩放比例 */
 }
 
 html {
