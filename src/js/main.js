@@ -110,6 +110,7 @@ const audioSettings = {
 let audioContext = null;
 let audioMasterGain = null;
 let audioNoiseBuffer = null;
+let audioUnlockPromise = null;
 try {
     const savedSoundEnabled = localStorage.getItem('drive_sound_enabled_v1');
     const savedSoundVolume = parseFloat(localStorage.getItem('drive_sound_volume_v1'));
@@ -431,6 +432,48 @@ function ensureAudioContext() {
     return audioContext;
 }
 
+function playSilentAudioUnlockPulse(ctx) {
+    if (!ctx || !audioMasterGain) return;
+    try {
+        const source = ctx.createBufferSource();
+        source.buffer = ctx.createBuffer(1, 1, ctx.sampleRate);
+        const gain = ctx.createGain();
+        gain.gain.value = 0.0001;
+        source.connect(gain);
+        gain.connect(audioMasterGain);
+        source.start(ctx.currentTime);
+        source.stop(ctx.currentTime + 0.01);
+    } catch (e) {
+        // Some mobile browsers are picky while the context is still suspended.
+    }
+}
+
+function unlockAudioForUserGesture() {
+    if (!audioSettings.enabled || audioSettings.volume <= 0) return null;
+    const ctx = ensureAudioContext();
+    if (!ctx) return null;
+
+    playSilentAudioUnlockPulse(ctx);
+    if (ctx.state === 'running') {
+        updateAudioMasterGain();
+        return ctx;
+    }
+
+    if (!audioUnlockPromise) {
+        audioUnlockPromise = ctx.resume()
+            .then(() => {
+                playSilentAudioUnlockPulse(ctx);
+                updateAudioMasterGain();
+                return ctx;
+            })
+            .catch(() => null)
+            .finally(() => {
+                audioUnlockPromise = null;
+            });
+    }
+    return ctx;
+}
+
 function updateAudioMasterGain() {
     if (!audioMasterGain || !audioContext) return;
     const now = audioContext.currentTime;
@@ -461,7 +504,7 @@ function createSoundGain(ctx, startTime, duration, peak = 0.5, attack = 0.012, r
 
 function playTone({ frequency, endFrequency, duration, type = 'sine', peak = 0.35, startOffset = 0, pan = 0 }) {
     const ctx = ensureAudioContext();
-    if (!ctx || !audioMasterGain || !audioSettings.enabled || audioSettings.volume <= 0) return;
+    if (!ctx || ctx.state !== 'running' || !audioMasterGain || !audioSettings.enabled || audioSettings.volume <= 0) return;
     const start = ctx.currentTime + startOffset;
     const osc = ctx.createOscillator();
     const gain = createSoundGain(ctx, start, duration, peak);
@@ -482,7 +525,7 @@ function playTone({ frequency, endFrequency, duration, type = 'sine', peak = 0.3
 
 function playNoiseBurst({ duration, peak = 0.25, startOffset = 0, filterFrequency = 900, pan = 0 }) {
     const ctx = ensureAudioContext();
-    if (!ctx || !audioMasterGain || !audioSettings.enabled || audioSettings.volume <= 0) return;
+    if (!ctx || ctx.state !== 'running' || !audioMasterGain || !audioSettings.enabled || audioSettings.volume <= 0) return;
     const start = ctx.currentTime + startOffset;
     const source = ctx.createBufferSource();
     source.buffer = getAudioNoiseBuffer(ctx);
@@ -505,7 +548,14 @@ function playNoiseBurst({ duration, peak = 0.25, startOffset = 0, filterFrequenc
 
 function playDriveSound(kind) {
     if (!audioSettings.enabled || audioSettings.volume <= 0) return;
-    ensureAudioContext();
+    const ctx = unlockAudioForUserGesture();
+    if (!ctx) return;
+    if (ctx.state !== 'running') {
+        audioUnlockPromise?.then((unlockedCtx) => {
+            if (unlockedCtx?.state === 'running') playDriveSound(kind);
+        });
+        return;
+    }
     switch (kind) {
         case 'forward':
             playTone({ frequency: 196, endFrequency: 294, duration: 0.20, type: 'triangle', peak: 0.12 });
@@ -624,6 +674,15 @@ function resetGestureState() {
     gestureState.active = false;
 }
 
+function setupAudioUnlockListeners() {
+    const unlock = () => unlockAudioForUserGesture();
+    const pointerOptions = { capture: true, passive: true };
+    document.addEventListener('pointerdown', unlock, pointerOptions);
+    document.addEventListener('touchstart', unlock, pointerOptions);
+    document.addEventListener('click', unlock, pointerOptions);
+    document.addEventListener('keydown', unlock, true);
+}
+
 function setupGestureControls() {
     document.addEventListener('pointerdown', (event) => {
         if (!isDrivingGestureEnabled() || gestureState.pointerId !== null || isGestureBlockedTarget(event.target)) return;
@@ -662,6 +721,7 @@ function setupGestureControls() {
 }
 
 function setupUI() {
+    setupAudioUnlockListeners();
     document.getElementById('settings-button')?.addEventListener('click', openSettingsPanel);
     document.getElementById('close-settings-btn')?.addEventListener('click', closeSettingsPanel);
 
@@ -808,13 +868,14 @@ const soundVolumeSlider = document.getElementById('sound-volume-slider');
 updateSoundSettingsUI();
 soundToggle?.addEventListener('change', (e) => {
     audioSettings.enabled = e.target.value === 'on';
-    if (audioSettings.enabled) ensureAudioContext();
+    if (audioSettings.enabled) unlockAudioForUserGesture();
     updateAudioMasterGain();
     saveAudioSettings();
     updateSoundSettingsUI();
 });
 soundVolumeSlider?.addEventListener('input', (e) => {
     audioSettings.volume = Math.min(1, Math.max(0, parseFloat(e.target.value) || 0));
+    if (audioSettings.enabled && audioSettings.volume > 0) unlockAudioForUserGesture();
     updateAudioMasterGain();
     saveAudioSettings();
     updateSoundSettingsUI();
