@@ -508,9 +508,10 @@ function playDriveSound(kind) {
     ensureAudioContext();
     switch (kind) {
         case 'forward':
-            playTone({ frequency: 150, endFrequency: 245, duration: 0.22, type: 'sawtooth', peak: 0.18 });
-            playTone({ frequency: 410, endFrequency: 620, duration: 0.16, type: 'triangle', peak: 0.10, startOffset: 0.02 });
-            playNoiseBurst({ duration: 0.12, peak: 0.06, filterFrequency: 1400 });
+            playTone({ frequency: 196, endFrequency: 294, duration: 0.20, type: 'triangle', peak: 0.12 });
+            playTone({ frequency: 523.25, endFrequency: 783.99, duration: 0.16, type: 'sine', peak: 0.085, startOffset: 0.018 });
+            playTone({ frequency: 1046.5, endFrequency: 1174.66, duration: 0.08, type: 'triangle', peak: 0.035, startOffset: 0.11 });
+            playNoiseBurst({ duration: 0.09, peak: 0.025, filterFrequency: 2600, startOffset: 0.02 });
             break;
         case 'back':
             playTone({ frequency: 260, endFrequency: 210, duration: 0.12, type: 'square', peak: 0.10 });
@@ -529,6 +530,19 @@ function playDriveSound(kind) {
             playTone({ frequency: 92, endFrequency: 42, duration: 0.28, type: 'sine', peak: 0.36 });
             playNoiseBurst({ duration: 0.20, peak: 0.26, filterFrequency: 520 });
             playTone({ frequency: 170, endFrequency: 118, duration: 0.11, type: 'square', peak: 0.08, startOffset: 0.03 });
+            break;
+        case 'waypoint':
+            playTone({ frequency: 659.25, endFrequency: 880, duration: 0.13, type: 'sine', peak: 0.16 });
+            playTone({ frequency: 1318.51, endFrequency: 1760, duration: 0.12, type: 'triangle', peak: 0.075, startOffset: 0.05 });
+            playNoiseBurst({ duration: 0.08, peak: 0.035, filterFrequency: 3200, startOffset: 0.02 });
+            break;
+        case 'victory':
+            playTone({ frequency: 523.25, duration: 0.16, type: 'triangle', peak: 0.16 });
+            playTone({ frequency: 659.25, duration: 0.16, type: 'triangle', peak: 0.15, startOffset: 0.14 });
+            playTone({ frequency: 783.99, duration: 0.18, type: 'triangle', peak: 0.16, startOffset: 0.28 });
+            playTone({ frequency: 1046.5, duration: 0.34, type: 'sine', peak: 0.18, startOffset: 0.44 });
+            playTone({ frequency: 1318.51, duration: 0.24, type: 'sine', peak: 0.10, startOffset: 0.58 });
+            playNoiseBurst({ duration: 0.18, peak: 0.045, filterFrequency: 3600, startOffset: 0.42 });
             break;
     }
 }
@@ -1146,6 +1160,7 @@ function afterMoveChecks() {
 
                 // Trigger enhanced firework effect
                 createFireworkEffect(collectedWaypointMesh.position, nextWpData.color);
+                playDriveSound('waypoint');
                 
                 // Change appearance instead of hiding
                 const gem = collectedWaypointMesh.getObjectByName('waypoint_gem');
@@ -1196,6 +1211,7 @@ function afterMoveChecks() {
             checkForTurns({ showPrompt: false });
         } else {
             gameState = 'LEVEL_COMPLETE';
+            playDriveSound('victory');
             createGoalHeartBurst(goalMarker ? goalMarker.position : player.position, Boolean(goalMarker?.userData?.techGoal));
             levelCompleteTimeout = setTimeout(() => {
                 levelCompleteTimeout = null;
