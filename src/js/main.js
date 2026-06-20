@@ -5,6 +5,7 @@ import { TILE_SIZE, WALL_HEIGHT, MOVE_SPEED, TURN_SPEED, LUCKY_CAT } from './con
 import { translations } from './i18n.js';
 import { levels } from './levels.js';
 import { createTechLuckyCatAsset } from './assets/techLuckyCat.js';
+import { createGrandTouringCarAsset } from './assets/grandTouringCar.js';
 
 // ====================================================================
 // 全局变量和状态机 (Global Variables & State Machine)
@@ -236,7 +237,7 @@ async function init() {
     scene.add(player);
     
     // Initialize Player Car Model for 3P view (v10.0)
-    playerCarModel = createPlayerCarModel();
+    playerCarModel = createGrandTouringCarAsset({ tileSize: TILE_SIZE });
     player.add(playerCarModel);
     
     // Camera setup (Parented to player) (v10.0)
@@ -1307,13 +1308,10 @@ function animate() {
             
             // Animate wheels in 3P view (v10.0)
             if (viewMode === '3P' && playerCarModel) {
-                // Iterate through the car model parts to find the wheels (which are Groups containing the tire and rim)
                 playerCarModel.children.forEach(child => {
                     if (child.name === 'wheelGroup') {
-                        // Rotate the wheel group around its local X axis (since it was rotated on Z during creation)
-                        // Rotation speed is proportional to movement speed. (MOVE_SPEED / wheelRadius)
-                        // Wheel radius is TILE_SIZE * 0.15
-                        child.rotation.x += (MOVE_SPEED / (TILE_SIZE * 0.15)) * delta;
+                        const wheelRadius = child.userData.radius || TILE_SIZE * 0.08;
+                        child.rotation.x += (MOVE_SPEED / wheelRadius) * delta;
                     }
                 });
             }
@@ -1386,85 +1384,6 @@ function onKeyUp(event) {
 // ====================================================================
 // 3D迷宫与视觉生成 (3D Maze & Visuals Generation)
 // ====================================================================
-
-// New function to create the 3P Car Model (v10.0)
-function createPlayerCarModel() {
-    const carGroup = new THREE.Group();
-    
-    // Main Chassis
-    const bodyMaterial = new THREE.MeshStandardMaterial({ color: 0xE53935, roughness: 0.3, metalness: 0.6 }); // Sporty Red
-    const bodyGeometry = new THREE.BoxGeometry(TILE_SIZE * 0.42, TILE_SIZE * 0.21, TILE_SIZE * 0.63);
-    const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
-    body.position.y = TILE_SIZE * 0.21;
-    carGroup.add(body);
-
-    // Cabin
-    const cabinMaterial = new THREE.MeshStandardMaterial({ color: 0x424242, roughness: 0.4, metalness: 0.4 }); // Dark Gray
-    // Using a slightly trapezoidal shape for the cabin
-    const cabinShape = new THREE.Shape();
-    const cw = TILE_SIZE * 0.175;
-    cabinShape.moveTo(-cw, 0);
-    cabinShape.lineTo(cw, 0);
-    cabinShape.lineTo(cw * 0.8, TILE_SIZE * 0.21);
-    cabinShape.lineTo(-cw * 0.8, TILE_SIZE * 0.21);
-    cabinShape.closePath();
-
-    const extrudeSettings = { depth: TILE_SIZE * 0.35, bevelEnabled: false };
-    const cabinGeometry = new THREE.ExtrudeGeometry(cabinShape, extrudeSettings);
-    const cabin = new THREE.Mesh(cabinGeometry, cabinMaterial);
-    cabin.position.y = TILE_SIZE * 0.315;
-    cabin.position.z = -TILE_SIZE * 0.245;
-    carGroup.add(cabin);
-    
-    // Spoiler
-    const spoilerMat = bodyMaterial;
-    const spoiler = new THREE.Mesh(new THREE.BoxGeometry(TILE_SIZE * 0.42, TILE_SIZE * 0.035, TILE_SIZE * 0.07), spoilerMat);
-    spoiler.position.set(0, TILE_SIZE * 0.35, -TILE_SIZE * 0.28);
-    carGroup.add(spoiler);
-
-    // Wheels
-    const wheelMaterial = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.7 });
-    const rimMaterial = new THREE.MeshStandardMaterial({ color: 0xAAAAAA, metalness: 0.8, roughness: 0.2 });
-    const wheelRadius = TILE_SIZE * 0.105;
-    const wheelWidth = TILE_SIZE * 0.07;
-    const wheelGeometry = new THREE.CylinderGeometry(wheelRadius, wheelRadius, wheelWidth, 24);
-    const rimGeometry = new THREE.CylinderGeometry(wheelRadius * 0.7, wheelRadius * 0.7, wheelWidth + 0.01, 12);
-    
-    const wheelPositions = [
-        { x: TILE_SIZE * 0.21, z: TILE_SIZE * 0.21 },  // Front right
-        { x: -TILE_SIZE * 0.21, z: TILE_SIZE * 0.21 }, // Front left
-        { x: TILE_SIZE * 0.21, z: -TILE_SIZE * 0.21 }, // Rear right
-        { x: -TILE_SIZE * 0.21, z: -TILE_SIZE * 0.21 } // Rear left
-    ];
-
-    wheelPositions.forEach(pos => {
-        const wheelGroupInternal = new THREE.Group();
-        wheelGroupInternal.name = "wheelGroup"; // Name for easy identification in animation loop
-        const wheel = new THREE.Mesh(wheelGeometry, wheelMaterial);
-        const rim = new THREE.Mesh(rimGeometry, rimMaterial);
-        wheelGroupInternal.add(wheel);
-        wheelGroupInternal.add(rim);
-
-        // Rotate so the cylinder axis aligns with the X-axis (for rotation during driving)
-        wheelGroupInternal.rotation.z = Math.PI / 2;
-        wheelGroupInternal.position.set(pos.x + Math.sign(pos.x) * wheelWidth/2, wheelRadius, pos.z);
-        carGroup.add(wheelGroupInternal);
-    });
-    
-    // Headlights
-    const lightMat = new THREE.MeshBasicMaterial({ color: 0xFFF9C4 });
-    const lightGeo = new THREE.PlaneGeometry(TILE_SIZE * 0.105, TILE_SIZE * 0.07);
-
-    const hl1 = new THREE.Mesh(lightGeo, lightMat);
-    hl1.position.set(TILE_SIZE * 0.14, TILE_SIZE * 0.21, TILE_SIZE * 0.3157);
-    carGroup.add(hl1);
-
-    const hl2 = new THREE.Mesh(lightGeo, lightMat);
-    hl2.position.set(-TILE_SIZE * 0.14, TILE_SIZE * 0.21, TILE_SIZE * 0.3157);
-    carGroup.add(hl2);
-
-    return carGroup;
-}
 
 function createInstancedWallBatch(geometry, material, transforms) {
     if (transforms.length === 0) return;
