@@ -4,7 +4,7 @@ import { TextGeometry } from 'three/addons/geometries/TextGeometry.js';
 import { TILE_SIZE, WALL_HEIGHT, MOVE_SPEED, TURN_SPEED, LUCKY_CAT } from './constants.js';
 import { translations } from './i18n.js';
 import { levels } from './levels.js';
-import { createTechLuckyCatAsset } from './assets/techLuckyCat.js?v=20260621-cat-body';
+import { createTechLuckyCatAsset } from './assets/techLuckyCat.js?v=20260621-cat-solid';
 import { createGrandTouringCarAsset } from './assets/grandTouringCar.js';
 
 // ====================================================================

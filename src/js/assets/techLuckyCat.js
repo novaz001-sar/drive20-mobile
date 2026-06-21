@@ -91,24 +91,24 @@ function createTubeLine(points, material, radius = 0.018) {
 
 function createClosedEye(side, material) {
     return createTubeLine([
-        new THREE.Vector3(side * 0.58, 2.00, 1.10),
-        new THREE.Vector3(side * 0.40, 2.12, 1.14),
-        new THREE.Vector3(side * 0.22, 2.02, 1.12)
+        new THREE.Vector3(side * 0.56, 2.02, 1.22),
+        new THREE.Vector3(side * 0.40, 2.14, 1.26),
+        new THREE.Vector3(side * 0.23, 2.04, 1.24)
     ], material, 0.026);
 }
 
 function createMouthLine(side, material) {
     return createTubeLine([
-        new THREE.Vector3(0, 1.74, 1.22),
-        new THREE.Vector3(side * 0.12, 1.63, 1.23),
-        new THREE.Vector3(side * 0.28, 1.70, 1.18)
+        new THREE.Vector3(0, 1.76, 1.30),
+        new THREE.Vector3(side * 0.12, 1.65, 1.31),
+        new THREE.Vector3(side * 0.28, 1.72, 1.27)
     ], material, 0.014);
 }
 
 function createWhisker(side, y, material) {
     return createTubeLine([
-        new THREE.Vector3(side * 0.54, y, 1.14),
-        new THREE.Vector3(side * 0.98, y + 0.035, 1.02)
+        new THREE.Vector3(side * 0.52, y, 1.24),
+        new THREE.Vector3(side * 0.96, y + 0.035, 1.13)
     ], material, 0.011);
 }
 
@@ -123,21 +123,21 @@ function createStarPatch(material, x, y, z, scale = 1, rotation = 0) {
 
 function createTriangularEar(side, shellMat, innerMat, trimMat) {
     const earGroup = new THREE.Group();
-    earGroup.position.set(side * 0.82, 2.80, 0.08);
-    earGroup.rotation.set(0.08, side * -0.08, side * -0.34);
+    earGroup.position.set(side * 0.78, 2.76, 0.04);
+    earGroup.rotation.set(0.03, side * -0.08, side * -0.26);
 
-    const outer = new THREE.Mesh(new THREE.ConeGeometry(0.43, 0.78, 3), shellMat);
+    const outer = new THREE.Mesh(new THREE.ConeGeometry(0.36, 0.72, 3), shellMat);
     outer.rotation.y = Math.PI / 3;
     outer.name = side < 0 ? 'leftTriangularCatEar' : 'rightTriangularCatEar';
     earGroup.add(outer);
 
-    const inner = new THREE.Mesh(new THREE.ConeGeometry(0.27, 0.49, 3), innerMat);
+    const inner = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.44, 3), innerMat);
     inner.position.set(0, -0.025, 0.08);
     inner.scale.set(0.82, 0.72, 0.72);
     inner.rotation.y = Math.PI / 3;
     earGroup.add(inner);
 
-    const trim = new THREE.Mesh(new THREE.TorusGeometry(0.31, 0.018, 6, 3), trimMat);
+    const trim = new THREE.Mesh(new THREE.TorusGeometry(0.26, 0.014, 6, 3), trimMat);
     trim.position.set(0, -0.12, 0.09);
     trim.rotation.set(Math.PI / 2, 0, Math.PI / 6);
     trim.scale.set(1.0, 0.78, 1.0);
@@ -158,8 +158,8 @@ function createPaw(shellMat, padMat, clawMat) {
     paw.add(pad);
 
     for (let i = 0; i < 3; i++) {
-        const claw = new THREE.Mesh(new THREE.ConeGeometry(0.045, 0.16, 8), clawMat);
-        claw.position.set((i - 1) * 0.14, -0.03, 0.31);
+        const claw = new THREE.Mesh(new THREE.ConeGeometry(0.032, 0.10, 8), clawMat);
+        claw.position.set((i - 1) * 0.12, -0.03, 0.28);
         claw.rotation.x = Math.PI / 2;
         paw.add(claw);
     }
@@ -182,33 +182,38 @@ export function createTechLuckyCatAsset() {
         roughness: 0.24,
         clearcoat: 0.86,
         emissive: 0x1d0d12,
-        emissiveIntensity: 0.03
+        emissiveIntensity: 0.03,
+        flatShading: false
     });
     const bodyMat = physicalMaterial(0xf8dfe4, {
         metalness: 0.14,
         roughness: 0.25,
         clearcoat: 0.82,
         emissive: 0x230912,
-        emissiveIntensity: 0.045
+        emissiveIntensity: 0.045,
+        flatShading: false
     });
     const pinkMat = physicalMaterial(0xffa5c4, {
         metalness: 0.08,
         roughness: 0.31,
         clearcoat: 0.72,
         emissive: 0x3c071a,
-        emissiveIntensity: 0.08
+        emissiveIntensity: 0.08,
+        flatShading: false
     });
     const goldMat = physicalMaterial(0xd9a45d, {
         metalness: 0.72,
         roughness: 0.22,
         clearcoat: 0.5,
         emissive: 0x241000,
-        emissiveIntensity: 0.05
+        emissiveIntensity: 0.05,
+        flatShading: false
     });
     const silverMat = physicalMaterial(0xd8dce4, {
         metalness: 0.76,
         roughness: 0.2,
-        clearcoat: 0.62
+        clearcoat: 0.62,
+        flatShading: false
     });
     const eyeMat = physicalMaterial(0x17151a, {
         metalness: 0.15,
@@ -219,53 +224,50 @@ export function createTechLuckyCatAsset() {
     const neonCyanMat = glowMaterial(0x8df7ff, 0.68);
     const starGlowMat = glowMaterial(0xfff6b8, 0.84);
 
-    const body = createRoundedBoxMesh(2.72, 2.32, 1.34, 0.42, bodyMat);
-    body.position.set(0, 0.02, 0);
-    body.name = 'roundedCubePlanetBody';
+    const body = new THREE.Mesh(new THREE.SphereGeometry(1.5, 28, 16), bodyMat);
+    body.scale.set(1, 0.8, 1);
+    body.name = 'solidTechLuckyCatBody';
     group.add(body);
 
-    const bellyPanel = createRoundedBoxMesh(1.28, 0.94, 0.08, 0.16, shellMat);
-    bellyPanel.position.set(0, -0.15, 0.72);
+    const bellyPanel = createRoundedBoxMesh(0.92, 0.62, 0.07, 0.15, shellMat);
+    bellyPanel.position.set(0, -0.14, 1.55);
     bellyPanel.rotation.x = THREE.MathUtils.degToRad(-3);
     bellyPanel.name = 'roundedBodyFrontPanel';
     group.add(bellyPanel);
-    addPanelLine(bellyPanel, neonPinkMat, -0.22, 0.16, 0.08);
-    addPanelLine(bellyPanel, neonCyanMat, 0.08, -0.02, 0.34);
-    addPanelLine(bellyPanel, neonPinkMat, 0.26, -0.20, 0.12);
+    addPanelLine(bellyPanel, neonPinkMat, -0.16, 0.10, 0.08);
+    addPanelLine(bellyPanel, neonCyanMat, 0.04, -0.02, 0.24);
+    addPanelLine(bellyPanel, neonPinkMat, 0.18, -0.14, 0.10);
 
-    const faceGeometry = new THREE.SphereGeometry(1.0, 18, 8, 0, Math.PI * 2, 0, Math.PI / 2);
-    faceGeometry.rotateX(Math.PI / 2);
-    faceGeometry.computeVertexNormals();
-    const face = new THREE.Mesh(faceGeometry, shellMat);
-    face.position.set(0, 1.80, 0.46);
-    face.scale.set(1.22, 1.00, 0.72);
-    face.name = 'catFaceHemisphere';
-    group.add(face);
+    const head = new THREE.Mesh(new THREE.SphereGeometry(1.2, 28, 16), shellMat);
+    head.position.y = 1.8;
+    head.name = 'solidTechLuckyCatHead';
+    group.add(head);
 
     group.add(createTriangularEar(-1, shellMat, pinkMat, goldMat));
     group.add(createTriangularEar(1, shellMat, pinkMat, goldMat));
 
-    const planetRing = new THREE.Mesh(new THREE.TorusGeometry(1.18, 0.035, 8, 56), neonPinkMat);
-    planetRing.position.set(0, 1.90, 1.08);
+    const planetRing = new THREE.Mesh(new THREE.TorusGeometry(1.26, 0.028, 8, 64), neonPinkMat);
+    planetRing.position.set(0, 1.86, -0.16);
     planetRing.rotation.set(0, 0, THREE.MathUtils.degToRad(-8));
-    planetRing.scale.set(1.14, 0.34, 1);
+    planetRing.scale.set(1.08, 0.34, 1);
     planetRing.name = 'techGoalHalo';
     group.add(planetRing);
 
-    const metalOrbit = new THREE.Mesh(new THREE.TorusGeometry(1.30, 0.024, 8, 56), silverMat);
+    const metalOrbit = new THREE.Mesh(new THREE.TorusGeometry(1.34, 0.018, 8, 64), silverMat);
     metalOrbit.position.copy(planetRing.position);
     metalOrbit.rotation.copy(planetRing.rotation);
-    metalOrbit.scale.set(1.12, 0.32, 1);
+    metalOrbit.position.z -= 0.02;
+    metalOrbit.scale.set(1.06, 0.32, 1);
     metalOrbit.name = 'catPlanetMetalOrbit';
     group.add(metalOrbit);
 
-    const foreheadBadge = new THREE.Mesh(new THREE.CylinderGeometry(0.21, 0.21, 0.055, 20), silverMat);
-    foreheadBadge.position.set(0, 2.34, 1.13);
+    const foreheadBadge = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 0.045, 20), silverMat);
+    foreheadBadge.position.set(0, 2.36, 1.08);
     foreheadBadge.rotation.x = Math.PI / 2;
     foreheadBadge.name = 'catPlanetForeheadBadge';
     group.add(foreheadBadge);
-    const tinyPlanet = new THREE.Mesh(new THREE.TorusGeometry(0.115, 0.01, 6, 24), neonPinkMat);
-    tinyPlanet.position.set(0, 2.34, 1.18);
+    const tinyPlanet = new THREE.Mesh(new THREE.TorusGeometry(0.095, 0.009, 6, 24), neonPinkMat);
+    tinyPlanet.position.set(0, 2.36, 1.12);
     tinyPlanet.rotation.set(Math.PI / 2, 0, THREE.MathUtils.degToRad(-10));
     group.add(tinyPlanet);
 
@@ -273,7 +275,7 @@ export function createTechLuckyCatAsset() {
     group.add(createClosedEye(1, eyeMat));
 
     const nose = new THREE.Mesh(new THREE.SphereGeometry(0.08, 10, 6), pinkMat);
-    nose.position.set(0, 1.82, 1.26);
+    nose.position.set(0, 1.84, 1.30);
     nose.scale.set(1.1, 0.82, 0.55);
     group.add(nose);
     group.add(createMouthLine(-1, neonPinkMat));
@@ -281,7 +283,7 @@ export function createTechLuckyCatAsset() {
 
     for (const side of [-1, 1]) {
         const blush = new THREE.Mesh(new THREE.SphereGeometry(0.14, 12, 6), pinkMat);
-        blush.position.set(side * 0.70, 1.67, 1.10);
+        blush.position.set(side * 0.68, 1.68, 1.22);
         blush.scale.set(1.38, 0.62, 0.28);
         blush.name = side < 0 ? 'leftCheekBlush' : 'rightCheekBlush';
         group.add(blush);
@@ -290,53 +292,54 @@ export function createTechLuckyCatAsset() {
         group.add(createWhisker(side, 1.58, neonPinkMat));
     }
 
-    group.add(createStarPatch(starGlowMat, -0.72, 0.48, 0.74, 0.72, -0.25));
-    group.add(createStarPatch(neonCyanMat, 0.72, -0.44, 0.74, 0.58, 0.22));
-    group.add(createStarPatch(neonPinkMat, -0.22, 2.48, 1.10, 0.46, 0.15));
+    group.add(createStarPatch(starGlowMat, -0.64, 0.45, 1.28, 0.55, -0.25));
+    group.add(createStarPatch(neonCyanMat, 0.64, -0.42, 1.22, 0.46, 0.22));
+    group.add(createStarPatch(neonPinkMat, -0.30, 2.42, 1.08, 0.34, 0.15));
 
-    const collar = new THREE.Mesh(new THREE.TorusGeometry(1.30, 0.10, 8, 48), pinkMat);
+    const collar = new THREE.Mesh(new THREE.TorusGeometry(1.22, 0.07, 8, 48), pinkMat);
     collar.position.set(0, 1.20, 0.08);
     collar.rotation.x = Math.PI / 2;
     collar.name = 'pinkPlanetCollar';
     group.add(collar);
 
-    const bell = new THREE.Mesh(new THREE.SphereGeometry(0.20, 12, 8), goldMat);
-    bell.position.set(0, 1.20, 1.30);
+    const bell = new THREE.Mesh(new THREE.SphereGeometry(0.17, 12, 8), goldMat);
+    bell.position.set(0, 1.18, 1.24);
     bell.name = 'goldPlanetBell';
     group.add(bell);
     const bellSlot = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.025, 0.025), eyeMat);
-    bellSlot.position.set(0, 1.13, 1.48);
+    bellSlot.position.set(0, 1.13, 1.38);
     group.add(bellSlot);
 
     for (const side of [-1, 1]) {
         const leg = new THREE.Mesh(new THREE.SphereGeometry(0.34, 12, 8), shellMat);
-        leg.position.set(side * 0.72, -1.10, 0.42);
-        leg.scale.set(1.12, 0.60, 0.88);
+        leg.position.set(side * 0.58, -1.02, 0.96);
+        leg.scale.set(1.04, 0.58, 0.78);
         group.add(leg);
         for (let i = 0; i < 3; i++) {
             const claw = new THREE.Mesh(new THREE.ConeGeometry(0.038, 0.13, 8), goldMat);
-            claw.position.set(side * 0.72 + (i - 1) * 0.12, -1.18, 0.75);
+            claw.position.set(side * 0.58 + (i - 1) * 0.12, -1.08, 1.23);
             claw.rotation.x = Math.PI / 2;
             group.add(claw);
         }
     }
 
     const sidePaw = createPaw(shellMat, pinkMat, goldMat);
-    sidePaw.position.set(1.15, 0.42, 0.45);
-    sidePaw.rotation.set(0.08, -0.24, 0.18);
+    sidePaw.position.set(1.02, -0.36, 1.20);
+    sidePaw.rotation.set(0.04, -0.28, 0.08);
+    sidePaw.scale.setScalar(0.78);
     group.add(sidePaw);
 
     const armPivot = new THREE.Object3D();
-    armPivot.position.set(-1.05, 1.10, 0.35);
+    armPivot.position.set(-1.05, 1.10, 0.16);
     armPivot.name = 'catPlanetRaisedArmPivot';
     group.add(armPivot);
 
     const armCurve = new THREE.CatmullRomCurve3([
         new THREE.Vector3(0, 0, 0),
-        new THREE.Vector3(0, 0.75, 0.25),
-        new THREE.Vector3(0, 1.35, 0.40)
+        new THREE.Vector3(0, 0.75, 0.18),
+        new THREE.Vector3(0, 1.35, 0.28)
     ]);
-    const arm = new THREE.Mesh(new THREE.TubeGeometry(armCurve, 20, 0.30, 8, false), shellMat);
+    const arm = new THREE.Mesh(new THREE.TubeGeometry(armCurve, 20, 0.24, 8, false), shellMat);
     arm.name = 'lowPolyWavingArm';
     armPivot.add(arm);
 
@@ -348,7 +351,7 @@ export function createTechLuckyCatAsset() {
     const wavingPaw = createPaw(shellMat, pinkMat, goldMat);
     wavingPaw.position.set(0, 0.02, 0.02);
     wavingPaw.rotation.set(0.18, -0.1, 0.05);
-    wavingPaw.scale.setScalar(1.18);
+    wavingPaw.scale.setScalar(1.05);
     wrist.add(wavingPaw);
     const pawStar = createStarPatch(neonPinkMat, 0.0, 0.13, 0.30, 0.42, 0.12);
     wrist.add(pawStar);
@@ -365,7 +368,7 @@ export function createTechLuckyCatAsset() {
     group.add(baseGlow);
 
     const techLight = new THREE.PointLight(0xff8ac8, 1.6, 18, 1.45);
-    techLight.position.set(0, 1.90, 1.90);
+    techLight.position.set(0, 1.85, 2.10);
     group.add(techLight);
 
     return {
