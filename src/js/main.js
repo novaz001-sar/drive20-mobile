@@ -5,7 +5,7 @@ import { TILE_SIZE, WALL_HEIGHT, MOVE_SPEED, TURN_SPEED, LUCKY_CAT } from './con
 import { translations } from './i18n.js';
 import { levels } from './levels.js';
 import { createTechLuckyCatAsset } from './assets/techLuckyCat.js?v=20260621-cat-solid';
-import { createGrandTouringCarAsset } from './assets/grandTouringCar.js';
+import { createGrandTouringCarAsset } from './assets/grandTouringCar.js?v=20260623-minimal-tech';
 
 // ====================================================================
 // 全局变量和状态机 (Global Variables & State Machine)
@@ -58,9 +58,12 @@ let currentLevelState = {
 };
 let activeFireworks = [];
 let activeGoalHeartBursts = [];
+let activeLevelCelebrations = [];
 let levelCompleteTimeout = null;
 let goalHeartGeometryCache = null;
+let celebrationStarGeometryCache = null;
 const goalHeartMaterialsCache = { classic: null, tech: null };
+const celebrationMaterialsCache = { classic: null, tech: null };
 const goalHeartTempMatrix = new THREE.Matrix4();
 const goalHeartTempPosition = new THREE.Vector3();
 const goalHeartTempScale = new THREE.Vector3();
@@ -374,12 +377,17 @@ function updateThirdPersonCamera() {
 
 function startDrivingFromBigMap() {
     const minimapContainer = document.getElementById('minimap-container');
+    const minimapControls = document.getElementById('minimap-controls');
     if (!minimapContainer.classList.contains('big-map') || gameState !== 'BIG_MAP') return;
 
     document.getElementById('big-map-view-modal').style.display = 'none';
     document.getElementById('view-toggle-container').style.display = 'flex';
     document.getElementById('third-person-controls').style.display = viewMode === '3P' ? 'flex' : 'none';
     document.body.appendChild(minimapContainer);
+    if (minimapControls) {
+        document.body.appendChild(minimapControls);
+        minimapControls.style.display = 'flex';
+    }
     minimapContainer.classList.remove('big-map');
     minimapContainer.classList.add('small-map');
     gameState = 'AT_INTERSECTION';
@@ -818,13 +826,13 @@ function setupUI() {
     });
 
     const minimapContainer = document.getElementById('minimap-container');
+    const minimapControls = document.getElementById('minimap-controls');
     const showMinimapBtn = document.getElementById('show-minimap-btn');
 
-    // NEW: Minimap orientation toggle (inside minimap) (v10.1)
+    // Minimap orientation toggle lives outside the canvas so it never covers the map.
     const minimapOrientationBtn = document.getElementById('minimap-orientation-btn');
     if (minimapOrientationBtn) {
         minimapOrientationBtn.addEventListener('click', (e) => {
-            // Prevent triggering minimap container click (hide/start)
             e.stopPropagation();
             toggleMinimapOrientationMode();
         });
@@ -839,6 +847,7 @@ function setupUI() {
         // Small map click hides it and shows the toggle button
         else if (minimapContainer.classList.contains('small-map')) {
             minimapContainer.style.display = 'none';
+            if (minimapControls) minimapControls.style.display = 'none';
             showMinimapBtn.style.display = 'flex';
         }
     });
@@ -847,6 +856,8 @@ function setupUI() {
     showMinimapBtn.addEventListener('click', () => {
         showMinimapBtn.style.display = 'none';
         minimapContainer.style.display = 'block';
+        if (minimapControls) minimapControls.style.display = 'flex';
+        updateMinimapPlayer();
     });
 
     document.getElementById('start-driving-btn')?.addEventListener('click', startDrivingFromBigMap);
@@ -1066,6 +1077,7 @@ function showMainMenu() {
     techGoalHalo = null;
     techGoalPulseParts = [];
     clearGoalHeartBursts();
+    clearLevelCelebrations();
     minimapBgDirty = true;
     lastMinimapRenderKey = '';
     if(goalMarker) {
@@ -1077,6 +1089,8 @@ function showMainMenu() {
     document.getElementById('view-toggle-container').style.display = 'none';
     document.getElementById('third-person-controls').style.display = 'none'; // NEW: Hide 3P controls
     document.getElementById('minimap-container').style.display = 'none';
+    const minimapControls = document.getElementById('minimap-controls');
+    if (minimapControls) minimapControls.style.display = 'none';
     document.getElementById('show-minimap-btn').style.display = 'none';
     document.getElementById('big-map-prompt').style.display = 'none';
     document.getElementById('waypoint-hud').style.display = 'none';
@@ -1121,6 +1135,7 @@ function loadLevel(levelData) {
     techGoalHalo = null;
     techGoalPulseParts = [];
     clearGoalHeartBursts();
+    clearLevelCelebrations();
     minimapBgDirty = true;
     lastMinimapRenderKey = '';
     if(goalMarker) {
@@ -1179,7 +1194,12 @@ function loadLevel(levelData) {
     const bigMapViewModal = document.getElementById('big-map-view-modal');
     const bigMapWrapper = document.getElementById('big-map-container-wrapper');
     const minimapContainer = document.getElementById('minimap-container');
+    const minimapControls = document.getElementById('minimap-controls');
     bigMapWrapper.appendChild(minimapContainer);
+    if (minimapControls) {
+        bigMapWrapper.appendChild(minimapControls);
+        minimapControls.style.display = 'flex';
+    }
     minimapContainer.style.display = 'block';
     minimapContainer.classList.remove('small-map');
     minimapContainer.classList.add('big-map');
@@ -1285,7 +1305,10 @@ function afterMoveChecks() {
         } else {
             gameState = 'LEVEL_COMPLETE';
             playDriveSound('victory');
-            createGoalHeartBurst(goalMarker ? goalMarker.position : player.position, Boolean(goalMarker?.userData?.techGoal));
+            const celebrationPosition = goalMarker ? goalMarker.position : player.position;
+            const isTechGoal = Boolean(goalMarker?.userData?.techGoal);
+            createLevelCelebrationEffect(celebrationPosition, isTechGoal);
+            createGoalHeartBurst(celebrationPosition, isTechGoal);
             levelCompleteTimeout = setTimeout(() => {
                 levelCompleteTimeout = null;
                 if (gameState === 'LEVEL_COMPLETE') showLevelComplete();
@@ -1586,6 +1609,69 @@ function animate() {
             });
             scene.remove(burst.group);
             activeGoalHeartBursts.splice(i, 1);
+        }
+    }
+
+    for (let i = activeLevelCelebrations.length - 1; i >= 0; i--) {
+        const celebration = activeLevelCelebrations[i];
+        let allStarsGone = true;
+        celebration.elapsed += delta;
+
+        celebration.rings.forEach((ring, index) => {
+            const ringLife = Math.max(0, 1 - celebration.elapsed / ring.userData.duration);
+            const grow = 1 + celebration.elapsed * ring.userData.growSpeed;
+            ring.scale.setScalar(grow);
+            ring.rotation.z += delta * (index % 2 === 0 ? 0.55 : -0.42);
+            ring.material.opacity = ring.userData.baseOpacity * Math.pow(ringLife, 1.35);
+        });
+
+        celebration.stars.forEach(star => {
+            const mesh = celebration.meshes[star.meshIndex];
+            if (star.lifespan > 0) {
+                allStarsGone = false;
+                star.vy -= delta * 0.42;
+                star.x += star.vx * delta;
+                star.y += star.vy * delta;
+                star.z += star.vz * delta;
+                star.rotation += star.spin * delta;
+                star.lifespan -= delta;
+                const lifeRatio = Math.max(0, star.lifespan / star.maxLifespan);
+                const scale = star.baseScale * (0.8 + (1 - lifeRatio) * 0.85);
+                goalHeartTempPosition.set(star.x, star.y, star.z);
+                goalHeartTempScale.set(scale, scale, scale);
+                if (camera) {
+                    goalHeartTempQuaternion.copy(camera.quaternion);
+                    goalHeartSpinQuaternion.setFromAxisAngle(GOAL_HEART_SPIN_AXIS, star.rotation);
+                    goalHeartTempQuaternion.multiply(goalHeartSpinQuaternion);
+                } else {
+                    goalHeartTempQuaternion.identity();
+                }
+                goalHeartTempMatrix.compose(goalHeartTempPosition, goalHeartTempQuaternion, goalHeartTempScale);
+            } else {
+                goalHeartTempPosition.set(0, 0, 0);
+                goalHeartTempScale.set(0.0001, 0.0001, 0.0001);
+                goalHeartTempQuaternion.identity();
+                goalHeartTempMatrix.compose(goalHeartTempPosition, goalHeartTempQuaternion, goalHeartTempScale);
+            }
+            mesh.setMatrixAt(star.instanceIndex, goalHeartTempMatrix);
+        });
+
+        celebration.meshes.forEach(mesh => {
+            mesh.instanceMatrix.needsUpdate = true;
+            const lifeRatio = Math.max(0, celebration.lifespan / celebration.maxLifespan);
+            mesh.material.opacity = celebration.baseOpacity * Math.pow(lifeRatio, 0.65);
+        });
+        if (celebration.light) {
+            celebration.light.intensity = Math.max(0, celebration.light.intensity - delta * 2.6);
+        }
+        celebration.lifespan -= delta;
+        if (allStarsGone && celebration.lifespan <= 0) {
+            celebration.rings.forEach(ring => {
+                if (ring.geometry) ring.geometry.dispose();
+                if (ring.material) ring.material.dispose();
+            });
+            scene.remove(celebration.group);
+            activeLevelCelebrations.splice(i, 1);
         }
     }
 
@@ -2094,10 +2180,60 @@ function getGoalHeartMaterials(isTechGoal = false) {
     return goalHeartMaterialsCache[key];
 }
 
+function createCelebrationStarGeometry() {
+    if (celebrationStarGeometryCache) return celebrationStarGeometryCache;
+    const shape = new THREE.Shape();
+    const outer = 0.34;
+    const inner = 0.14;
+    for (let i = 0; i < 10; i++) {
+        const radius = i % 2 === 0 ? outer : inner;
+        const angle = -Math.PI / 2 + i * Math.PI / 5;
+        const x = Math.cos(angle) * radius;
+        const y = Math.sin(angle) * radius;
+        if (i === 0) shape.moveTo(x, y);
+        else shape.lineTo(x, y);
+    }
+    shape.closePath();
+    const geometry = new THREE.ShapeGeometry(shape, 12);
+    geometry.center();
+    celebrationStarGeometryCache = geometry;
+    return celebrationStarGeometryCache;
+}
+
+function getCelebrationMaterials(isTechGoal = false) {
+    const key = isTechGoal ? 'tech' : 'classic';
+    if (!celebrationMaterialsCache[key]) {
+        const colors = isTechGoal
+            ? [0x5ee7ff, 0xff4fd8, 0xf8fdff]
+            : [0xffd166, 0xff6f91, 0xffffff];
+        celebrationMaterialsCache[key] = colors.map(color => new THREE.MeshBasicMaterial({
+            color,
+            transparent: true,
+            opacity: 0.96,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false,
+            side: THREE.DoubleSide
+        }));
+    }
+    return celebrationMaterialsCache[key];
+}
+
+function triggerCelebrationFlash(isTechGoal = false) {
+    const color = isTechGoal ? '94, 231, 255' : '255, 209, 102';
+    document.documentElement.style.setProperty('--celebration-flash-rgb', color);
+    document.body.classList.remove('level-celebration-flash');
+    void document.body.offsetWidth;
+    document.body.classList.add('level-celebration-flash');
+    window.setTimeout(() => document.body.classList.remove('level-celebration-flash'), 900);
+}
+
 function warmGoalHeartBurstResources() {
     const geometry = createHeartShapeGeometry();
+    const celebrationGeometry = createCelebrationStarGeometry();
     getGoalHeartMaterials(false);
     getGoalHeartMaterials(true);
+    getCelebrationMaterials(false);
+    getCelebrationMaterials(true);
     if (!renderer || !scene || !camera) return;
 
     const warmGroup = new THREE.Group();
@@ -2107,6 +2243,11 @@ function warmGoalHeartBurstResources() {
     goalHeartTempMatrix.compose(goalHeartTempPosition, goalHeartTempQuaternion, goalHeartTempScale);
     [...getGoalHeartMaterials(false), ...getGoalHeartMaterials(true)].forEach(material => {
         const mesh = new THREE.InstancedMesh(geometry, material, 1);
+        mesh.setMatrixAt(0, goalHeartTempMatrix);
+        warmGroup.add(mesh);
+    });
+    [...getCelebrationMaterials(false), ...getCelebrationMaterials(true)].forEach(material => {
+        const mesh = new THREE.InstancedMesh(celebrationGeometry, material, 1);
         mesh.setMatrixAt(0, goalHeartTempMatrix);
         warmGroup.add(mesh);
     });
@@ -2125,6 +2266,20 @@ function clearGoalHeartBursts() {
         if (burst.group) scene.remove(burst.group);
     });
     activeGoalHeartBursts = [];
+}
+
+function clearLevelCelebrations() {
+    activeLevelCelebrations.forEach(celebration => {
+        if (celebration.rings) {
+            celebration.rings.forEach(ring => {
+                if (ring.geometry) ring.geometry.dispose();
+                if (ring.material) ring.material.dispose();
+            });
+        }
+        if (celebration.group) scene.remove(celebration.group);
+    });
+    activeLevelCelebrations = [];
+    document.body.classList.remove('level-celebration-flash');
 }
 
 function createGoalHeartBurst(position, isTechGoal = false) {
@@ -2198,6 +2353,104 @@ function createGoalHeartBurst(position, isTechGoal = false) {
         maxLifespan,
         lifespan: maxLifespan,
         baseOpacity: 0.94
+    });
+}
+
+function createLevelCelebrationEffect(position, isTechGoal = false) {
+    if (!scene) return;
+    clearLevelCelebrations();
+    triggerCelebrationFlash(isTechGoal);
+
+    const group = new THREE.Group();
+    group.position.copy(position);
+    group.position.y += WALL_HEIGHT * 0.48;
+    scene.add(group);
+
+    const ringColors = isTechGoal ? [0x5ee7ff, 0xff4fd8, 0xffffff] : [0xffd166, 0xff6f91, 0xffffff];
+    const rings = ringColors.map((color, index) => {
+        const mat = new THREE.MeshBasicMaterial({
+            color,
+            transparent: true,
+            opacity: index === 0 ? 0.68 : 0.46,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false
+        });
+        const ring = new THREE.Mesh(new THREE.TorusGeometry(1.18 + index * 0.28, 0.035, 8, 72), mat);
+        ring.rotation.x = Math.PI / 2;
+        ring.position.y = index * 0.28;
+        ring.userData.baseOpacity = mat.opacity;
+        ring.userData.duration = 1.45 + index * 0.22;
+        ring.userData.growSpeed = 2.4 + index * 0.55;
+        group.add(ring);
+        return ring;
+    });
+
+    const geometry = createCelebrationStarGeometry();
+    const materials = getCelebrationMaterials(isTechGoal);
+    const count = prefersMobilePerformance() ? 30 : 44;
+    const meshCapacity = Math.ceil(count / materials.length);
+    const meshes = materials.map(material => {
+        material.opacity = 0.96;
+        const mesh = new THREE.InstancedMesh(geometry, material, meshCapacity);
+        mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+        mesh.frustumCulled = false;
+        mesh.count = 0;
+        group.add(mesh);
+        return mesh;
+    });
+    const instanceCounts = new Array(materials.length).fill(0);
+    const stars = [];
+    let maxLifespan = 0;
+
+    for (let i = 0; i < count; i++) {
+        const meshIndex = i % meshes.length;
+        const instanceIndex = instanceCounts[meshIndex]++;
+        const theta = Math.random() * Math.PI * 2;
+        const radius = Math.random() * 0.95;
+        const spread = 2.5 + Math.random() * 3.4;
+        const lifespan = 1.45 + Math.random() * 0.95;
+        maxLifespan = Math.max(maxLifespan, lifespan);
+        const star = {
+            meshIndex,
+            instanceIndex,
+            x: Math.cos(theta) * radius,
+            y: 0.25 + Math.random() * 0.55,
+            z: Math.sin(theta) * radius,
+            vx: Math.cos(theta) * spread,
+            vy: 2.2 + Math.random() * 2.1,
+            vz: Math.sin(theta) * spread,
+            maxLifespan: lifespan,
+            lifespan,
+            baseScale: 0.28 + Math.random() * 0.26,
+            spin: (Math.random() - 0.5) * 7.0,
+            rotation: Math.random() * Math.PI * 2
+        };
+        goalHeartTempPosition.set(star.x, star.y, star.z);
+        goalHeartTempScale.setScalar(star.baseScale);
+        goalHeartTempQuaternion.identity();
+        goalHeartTempMatrix.compose(goalHeartTempPosition, goalHeartTempQuaternion, goalHeartTempScale);
+        meshes[meshIndex].setMatrixAt(instanceIndex, goalHeartTempMatrix);
+        stars.push(star);
+    }
+    meshes.forEach((mesh, index) => {
+        mesh.count = instanceCounts[index];
+        mesh.instanceMatrix.needsUpdate = true;
+    });
+
+    const light = new THREE.PointLight(isTechGoal ? 0x5ee7ff : 0xffd166, 2.6, TILE_SIZE * 3.8, 1.6);
+    light.position.set(0, 2.6, 0);
+    group.add(light);
+
+    activeLevelCelebrations.push({
+        group,
+        rings,
+        stars,
+        meshes,
+        light,
+        elapsed: 0,
+        maxLifespan,
+        lifespan: maxLifespan,
+        baseOpacity: 0.96
     });
 }
 

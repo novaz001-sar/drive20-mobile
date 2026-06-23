@@ -250,6 +250,22 @@ canvas {
     border-radius: 6px;
 }
 
+#minimap-controls {
+    position: fixed;
+    top: 20px;
+    right: calc(20px + min(calc(25vmin * var(--minimap-scale)), 50vmin) + 10px);
+    z-index: 12;
+    pointer-events: auto;
+    display: none;
+    align-items: center;
+    justify-content: center;
+}
+
+#big-map-container-wrapper #minimap-controls {
+    position: static;
+    margin-top: 10px;
+}
+
 #mobile-drive-controls {
     position: fixed;
     left: auto;
@@ -323,16 +339,31 @@ body.driving-compact-ui {
     touch-action: none;
 }
 
+body.level-celebration-flash::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: 88;
+    pointer-events: none;
+    background:
+        radial-gradient(circle at 50% 54%, rgba(var(--celebration-flash-rgb, 255, 209, 102), 0.42), transparent 34%),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.20), rgba(255, 255, 255, 0));
+    animation: levelCelebrationFlash 0.82s ease-out forwards;
+}
+
+@keyframes levelCelebrationFlash {
+    0% { opacity: 0; }
+    18% { opacity: 1; }
+    100% { opacity: 0; }
+}
 
 
-/* --- NEW: Minimap Orientation Toggle Button --- */
+
+/* --- Minimap Orientation Toggle Button --- */
 #minimap-orientation-btn {
-    position: absolute;
-    left: 10px;
-    bottom: 10px;
     padding: 6px 10px;
-    min-width: 40px;
-    height: 34px;
+    min-width: 48px;
+    height: 42px;
     border-radius: 8px;
     border: 2px solid rgba(0, 123, 255, 0.35);
     background-color: rgba(255, 255, 255, 0.92);
@@ -922,6 +953,11 @@ body.driving-compact-ui {
         right: 8px;
     }
 
+    #minimap-controls {
+        top: calc(62px + env(safe-area-inset-top));
+        right: 148px;
+    }
+
     #minimap-container.small-map {
         top: calc(62px + env(safe-area-inset-top));
         right: 8px;
@@ -987,6 +1023,10 @@ body.driving-compact-ui {
         opacity: 0.72;
     }
 
+    body.driving-compact-ui #minimap-controls {
+        right: 132px;
+    }
+
     body.driving-compact-ui #view-toggle-container {
         top: max(8px, env(safe-area-inset-top));
         left: 50%;
@@ -1031,6 +1071,9 @@ body.driving-compact-ui {
     #minimap-container.big-map {
         width: min(82vw, 56vh);
         height: min(82vw, 56vh);
+    }
+    #big-map-container-wrapper #minimap-controls {
+        margin-top: 8px;
     }
     /* Adjust UI elements for mobile (v10.0) */
     #view-toggle-container {
@@ -1082,5 +1125,10 @@ body.driving-compact-ui {
         height: calc(18vmin * var(--minimap-scale));
         min-width: 70px;
         min-height: 70px;
+    }
+
+    #minimap-controls {
+        right: 92px;
+        top: calc(62px + env(safe-area-inset-top));
     }
 }
