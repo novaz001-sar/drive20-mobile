@@ -101,12 +101,12 @@ const FALLBACK_FLOOR_TEXTURE_URL = './src/assets/floor-cell.png?v=20260620-4';
 const GOAL_MARKER_BASE_Y = WALL_HEIGHT / 2 - 1.5;
 const WAYPOINT_GOAL_ASSET_HEIGHT = 4.6;
 const WAYPOINT_GOAL_FLOOR_CLEARANCE = 0.26;
-const WAYPOINT_MANEKI_NEKO_URL = './src/assets/models/optimized/waypoint-maneki-neko.glb?v=20260624-maneki-cat-only';
+const WAYPOINT_GOAL_MODEL_URL = './src/assets/models/optimized/waypoint-goal-purple-creature.glb?v=20260624-purple-creature-goal';
 const FREE_WAYPOINT_MARKER_URL = './src/assets/models/optimized/free-waypoint-marker.glb?v=20260624-free-waypoint';
 const FREE_WAYPOINT_MARKER_HEIGHT = 2.35;
 const FREE_WAYPOINT_MARKER_FLOOR_CLEARANCE = 0.16;
 let defaultFloorTexturePromise = null;
-let waypointGoalCatPromise = null;
+let waypointGoalModelPromise = null;
 let freeWaypointMarkerPromise = null;
 const tripoGoalBox = new THREE.Box3();
 const tripoGoalSize = new THREE.Vector3();
@@ -2089,29 +2089,29 @@ function createLuckyCat() {
     return catGroup;
 }
 
-function loadWaypointGoalCatSource() {
-    if (!waypointGoalCatPromise) {
+function loadWaypointGoalModelSource() {
+    if (!waypointGoalModelPromise) {
         const loader = new GLTFLoader();
-        waypointGoalCatPromise = loader.loadAsync(WAYPOINT_MANEKI_NEKO_URL).then((gltf) => {
+        waypointGoalModelPromise = loader.loadAsync(WAYPOINT_GOAL_MODEL_URL).then((gltf) => {
             const source = gltf.scene || gltf.scenes?.[0];
-            if (!source) throw new Error('Waypoint lucky cat GLB did not contain a scene.');
+            if (!source) throw new Error('Waypoint goal GLB did not contain a scene.');
 
-            source.name = 'waypointGoalLuckyCatSource';
+            source.name = 'waypointGoalModelSource';
             source.traverse((child) => {
                 if (!child.isMesh) return;
                 child.castShadow = false;
                 child.receiveShadow = true;
                 child.frustumCulled = true;
-                prepareWaypointGoalCatMesh(child);
+                prepareStandaloneAssetMesh(child);
             });
             return source;
         }).catch((error) => {
-            console.warn('Failed to load waypoint lucky cat goal model.', error);
-            waypointGoalCatPromise = null;
+            console.warn('Failed to load waypoint goal model.', error);
+            waypointGoalModelPromise = null;
             return null;
         });
     }
-    return waypointGoalCatPromise;
+    return waypointGoalModelPromise;
 }
 
 function loadFreeWaypointMarkerSource() {
@@ -2127,7 +2127,7 @@ function loadFreeWaypointMarkerSource() {
                 child.castShadow = false;
                 child.receiveShadow = true;
                 child.frustumCulled = true;
-                prepareWaypointGoalCatMesh(child);
+                prepareStandaloneAssetMesh(child);
             });
             return source;
         }).catch((error) => {
@@ -2139,7 +2139,7 @@ function loadFreeWaypointMarkerSource() {
     return freeWaypointMarkerPromise;
 }
 
-function prepareWaypointGoalCatMesh(mesh) {
+function prepareStandaloneAssetMesh(mesh) {
     const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
 
     materials.filter(Boolean).forEach((material) => {
@@ -2148,8 +2148,8 @@ function prepareWaypointGoalCatMesh(mesh) {
     });
 }
 
-function createWaypointGoalCatInstance(source) {
-    return createScaledStandaloneModel(source, WAYPOINT_GOAL_ASSET_HEIGHT, 'waypointLuckyCatGoal', 'waypointLuckyCatModel');
+function createWaypointGoalModelInstance(source) {
+    return createScaledStandaloneModel(source, WAYPOINT_GOAL_ASSET_HEIGHT, 'waypointPurpleCreatureGoal', 'waypointPurpleCreatureModel');
 }
 
 function createScaledStandaloneModel(source, targetHeight, wrapperName, modelName) {
@@ -2199,21 +2199,21 @@ function createFreeWaypointMarker(index) {
     return marker;
 }
 
-function attachWaypointGoalCatToGoal(marker, loadingPlaceholder) {
-    const requestId = Symbol('waypoint-goal-cat');
+function attachWaypointGoalModelToGoal(marker, loadingPlaceholder) {
+    const requestId = Symbol('waypoint-goal-model');
     marker.userData.tripoGoalRequestId = requestId;
     marker.userData.tripoGoalLoading = true;
 
-    loadWaypointGoalCatSource().then((source) => {
+    loadWaypointGoalModelSource().then((source) => {
         if (!source || goalMarker !== marker || marker.userData.tripoGoalRequestId !== requestId) {
             return;
         }
 
-        const waypointCat = createWaypointGoalCatInstance(source);
-        waypointCat.position.y = WAYPOINT_GOAL_FLOOR_CLEARANCE - GOAL_MARKER_BASE_Y;
+        const waypointGoalModel = createWaypointGoalModelInstance(source);
+        waypointGoalModel.position.y = WAYPOINT_GOAL_FLOOR_CLEARANCE - GOAL_MARKER_BASE_Y;
 
         if (loadingPlaceholder?.parent === marker) marker.remove(loadingPlaceholder);
-        marker.add(waypointCat);
+        marker.add(waypointGoalModel);
 
         luckyCatArm = null;
         luckyCatWrist = null;
@@ -2236,7 +2236,7 @@ function createGoalMarker(goalCoords) {
         cat = new THREE.Group();
         cat.name = 'waypointGoalLoadingPlaceholder';
         goalMarker.add(cat);
-        attachWaypointGoalCatToGoal(goalMarker, cat);
+        attachWaypointGoalModelToGoal(goalMarker, cat);
     } else {
         cat = createLuckyCat();
         cat.scale.set(1.5, 1.5, 1.5);
