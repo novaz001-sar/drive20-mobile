@@ -103,12 +103,11 @@ const WAYPOINT_GOAL_ASSET_HEIGHT = 4.6;
 const WAYPOINT_GOAL_FLOOR_CLEARANCE = 0.26;
 const WAYPOINT_GOAL_MODEL_URL = './src/assets/models/optimized/waypoint-goal-purple-creature.glb?v=20260624-purple-creature-goal';
 const FREE_WAYPOINT_MARKER_URL = './src/assets/models/optimized/free-waypoint-marker.glb?v=20260624-free-waypoint';
-const PLAYER_VEHICLE_MODEL_URL = './src/assets/models/optimized/player-cartoon-scooter.glb?v=20260625-cartoon-scooter';
+const PLAYER_VEHICLE_MODEL_URL = './src/assets/models/optimized/player-dragon-cart.glb?v=20260625-dragon-cart';
 const FREE_WAYPOINT_MARKER_HEIGHT = 2.35;
 const FREE_WAYPOINT_MARKER_FLOOR_CLEARANCE = 0.16;
 const PLAYER_VEHICLE_TARGET_LENGTH = TILE_SIZE * 0.78;
 const PLAYER_VEHICLE_YAW_OFFSET = Math.PI / 2;
-const THIRD_PERSON_OVERHEAD_ANGLE = 82;
 const DEFAULT_ASSET_SIZES = Object.freeze({
     goal: 1,
     waypoint: 1,
@@ -310,7 +309,7 @@ async function init() {
     scene.add(player);
     
     // Initialize Player Car Model for 3P view (v10.0)
-    playerCarModel = createPlayerCartoonScooterAsset();
+    playerCarModel = createPlayerDragonCartAsset();
     player.add(playerCarModel);
     
     // Camera setup (Parented to player) (v10.0)
@@ -399,9 +398,7 @@ function updateThirdPersonCamera() {
     if (viewMode !== '3P') return;
 
     const zoom = thirdPersonControls.zoom; // This is a multiplier for TILE_SIZE
-    const angleDeg = thirdPersonControls.cameraMode === 'overhead'
-        ? THIRD_PERSON_OVERHEAD_ANGLE
-        : thirdPersonControls.angle; // This is the downward angle in degrees
+    const angleDeg = thirdPersonControls.angle; // This is the downward angle in degrees
 
     const distance = TILE_SIZE * zoom;
     const angleRad = THREE.MathUtils.degToRad(angleDeg);
@@ -831,11 +828,6 @@ function setupUI() {
         cameraModeButtons.forEach(modeButton => {
             modeButton.classList.toggle('active', modeButton.dataset.cameraMode === thirdPersonControls.cameraMode);
         });
-        if (angleSlider) {
-            const isOverhead = thirdPersonControls.cameraMode === 'overhead';
-            angleSlider.disabled = isOverhead;
-            angleSlider.closest('.control-group')?.classList.toggle('disabled-control', isOverhead);
-        }
     };
 
     zoomSlider.addEventListener('input', (e) => {
@@ -2218,7 +2210,7 @@ function loadPlayerVehicleSource() {
             const source = gltf.scene || gltf.scenes?.[0];
             if (!source) throw new Error('Player vehicle GLB did not contain a scene.');
 
-            source.name = 'playerCartoonScooterSource';
+            source.name = 'playerDragonCartSource';
             source.traverse((child) => {
                 if (!child.isMesh) return;
                 child.castShadow = false;
@@ -2228,7 +2220,7 @@ function loadPlayerVehicleSource() {
             });
             return source;
         }).catch((error) => {
-            console.warn('Failed to load player cartoon scooter model.', error);
+            console.warn('Failed to load player dragon cart model.', error);
             playerVehicleModelPromise = null;
             return null;
         });
@@ -2236,14 +2228,14 @@ function loadPlayerVehicleSource() {
     return playerVehicleModelPromise;
 }
 
-function createPlayerCartoonScooterAsset() {
+function createPlayerDragonCartAsset() {
     const wrapper = new THREE.Group();
-    wrapper.name = 'playerCartoonScooterAsset';
+    wrapper.name = 'playerDragonCartAsset';
 
     loadPlayerVehicleSource().then((source) => {
         if (!source || !wrapper.parent) return;
         const model = source.clone(true);
-        model.name = 'playerCartoonScooterModel';
+        model.name = 'playerDragonCartModel';
         model.rotation.y = PLAYER_VEHICLE_YAW_OFFSET;
         wrapper.add(model);
 
