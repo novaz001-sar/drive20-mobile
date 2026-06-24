@@ -43,7 +43,8 @@ let playerInfo = { nickname: 'Driver', gender: 'other' };
 let thirdPersonControls = {
     zoom: 2.5, // Corresponds to slider initial value
     angle: 45, // Corresponds to slider initial value
-    carScale: 1.0 // NEW: Add car scale control
+    carScale: 1.0, // NEW: Add car scale control
+    cameraMode: 'follow'
 };
 
 let currentLevelState = {
@@ -102,11 +103,12 @@ const WAYPOINT_GOAL_ASSET_HEIGHT = 4.6;
 const WAYPOINT_GOAL_FLOOR_CLEARANCE = 0.26;
 const WAYPOINT_GOAL_MODEL_URL = './src/assets/models/optimized/waypoint-goal-purple-creature.glb?v=20260624-purple-creature-goal';
 const FREE_WAYPOINT_MARKER_URL = './src/assets/models/optimized/free-waypoint-marker.glb?v=20260624-free-waypoint';
-const PLAYER_VEHICLE_MODEL_URL = './src/assets/models/optimized/player-formula-racing-car.glb?v=20260624-formula-car';
+const PLAYER_VEHICLE_MODEL_URL = './src/assets/models/optimized/player-cartoon-scooter.glb?v=20260625-cartoon-scooter';
 const FREE_WAYPOINT_MARKER_HEIGHT = 2.35;
 const FREE_WAYPOINT_MARKER_FLOOR_CLEARANCE = 0.16;
 const PLAYER_VEHICLE_TARGET_LENGTH = TILE_SIZE * 0.78;
 const PLAYER_VEHICLE_YAW_OFFSET = Math.PI / 2;
+const THIRD_PERSON_OVERHEAD_ANGLE = 82;
 const DEFAULT_ASSET_SIZES = Object.freeze({
     goal: 1,
     waypoint: 1,
@@ -308,7 +310,7 @@ async function init() {
     scene.add(player);
     
     // Initialize Player Car Model for 3P view (v10.0)
-    playerCarModel = createPlayerFormulaRacingCarAsset();
+    playerCarModel = createPlayerCartoonScooterAsset();
     player.add(playerCarModel);
     
     // Camera setup (Parented to player) (v10.0)
@@ -369,6 +371,7 @@ function setViewMode(mode) {
     if (mode === '1P') {
         // First Person View
         if (controls) controls.style.display = 'none';
+        if (camera.parent !== player) player.add(camera);
         camera.position.set(0, WALL_HEIGHT * 0.4, 0);
         camera.rotation.x = THREE.MathUtils.degToRad(-8);
         camera.rotation.y = 0; camera.rotation.z = 0; // Reset local rotation
@@ -396,22 +399,28 @@ function updateThirdPersonCamera() {
     if (viewMode !== '3P') return;
 
     const zoom = thirdPersonControls.zoom; // This is a multiplier for TILE_SIZE
-    const angleDeg = thirdPersonControls.angle; // This is the downward angle in degrees
+    const angleDeg = thirdPersonControls.cameraMode === 'overhead'
+        ? THIRD_PERSON_OVERHEAD_ANGLE
+        : thirdPersonControls.angle; // This is the downward angle in degrees
 
     const distance = TILE_SIZE * zoom;
     const angleRad = THREE.MathUtils.degToRad(angleDeg);
 
-    // Calculate local position for the camera relative to the player
-    // Camera should be behind and above the player
     const camX = 0;
     const camY = distance * Math.sin(angleRad); // Height
     const camZ = distance * Math.cos(angleRad); // How far back
 
+    if (thirdPersonControls.cameraMode === 'overhead') {
+        if (camera.parent !== scene) scene.add(camera);
+        camera.position.set(player.position.x + camX, player.position.y + camY, player.position.z + camZ);
+        camera.lookAt(player.position.x, player.position.y + WALL_HEIGHT * 0.2, player.position.z);
+        return;
+    }
+
+    if (camera.parent !== player) player.add(camera);
     camera.position.set(camX, camY, camZ);
-    
-    // The rotation should be pointing down towards the player's origin.
     camera.rotation.x = -angleRad;
-    camera.rotation.y = 0; // Local rotations are 0
+    camera.rotation.y = 0;
     camera.rotation.z = 0;
 }
 
@@ -817,6 +826,17 @@ function setupUI() {
     const zoomSlider = document.getElementById('zoom-slider');
     const angleSlider = document.getElementById('angle-slider');
     const carSizeSlider = document.getElementById('car-size-slider'); // NEW
+    const cameraModeButtons = document.querySelectorAll('#third-person-camera-mode-toggle [data-camera-mode]');
+    const syncThirdPersonCameraModeUI = () => {
+        cameraModeButtons.forEach(modeButton => {
+            modeButton.classList.toggle('active', modeButton.dataset.cameraMode === thirdPersonControls.cameraMode);
+        });
+        if (angleSlider) {
+            const isOverhead = thirdPersonControls.cameraMode === 'overhead';
+            angleSlider.disabled = isOverhead;
+            angleSlider.closest('.control-group')?.classList.toggle('disabled-control', isOverhead);
+        }
+    };
 
     zoomSlider.addEventListener('input', (e) => {
         thirdPersonControls.zoom = parseFloat(e.target.value);
@@ -833,6 +853,14 @@ function setupUI() {
             playerCarModel.scale.set(thirdPersonControls.carScale, thirdPersonControls.carScale, thirdPersonControls.carScale);
         }
     });
+    cameraModeButtons.forEach(button => {
+        button.addEventListener('click', () => {
+            thirdPersonControls.cameraMode = button.dataset.cameraMode === 'overhead' ? 'overhead' : 'follow';
+            syncThirdPersonCameraModeUI();
+            updateThirdPersonCamera();
+        });
+    });
+    syncThirdPersonCameraModeUI();
 
     const setupMenuInfo = (buttonId, infoBoxId, descriptionKey) => {
         const button = document.getElementById(buttonId);
@@ -1806,6 +1834,10 @@ function animate() {
         starField.material.opacity = Math.min(1.0, Math.pow(nightFactor, 0.6) * 1.2);
     }
 
+    if (viewMode === '3P' && thirdPersonControls.cameraMode === 'overhead') {
+        updateThirdPersonCamera();
+    }
+
     renderer.render(scene, camera);
 }
 
@@ -2186,7 +2218,7 @@ function loadPlayerVehicleSource() {
             const source = gltf.scene || gltf.scenes?.[0];
             if (!source) throw new Error('Player vehicle GLB did not contain a scene.');
 
-            source.name = 'playerFormulaRacingCarSource';
+            source.name = 'playerCartoonScooterSource';
             source.traverse((child) => {
                 if (!child.isMesh) return;
                 child.castShadow = false;
@@ -2196,7 +2228,7 @@ function loadPlayerVehicleSource() {
             });
             return source;
         }).catch((error) => {
-            console.warn('Failed to load player formula racing car model.', error);
+            console.warn('Failed to load player cartoon scooter model.', error);
             playerVehicleModelPromise = null;
             return null;
         });
@@ -2204,14 +2236,14 @@ function loadPlayerVehicleSource() {
     return playerVehicleModelPromise;
 }
 
-function createPlayerFormulaRacingCarAsset() {
+function createPlayerCartoonScooterAsset() {
     const wrapper = new THREE.Group();
-    wrapper.name = 'playerFormulaRacingCarAsset';
+    wrapper.name = 'playerCartoonScooterAsset';
 
     loadPlayerVehicleSource().then((source) => {
         if (!source || !wrapper.parent) return;
         const model = source.clone(true);
-        model.name = 'playerFormulaRacingCarModel';
+        model.name = 'playerCartoonScooterModel';
         model.rotation.y = PLAYER_VEHICLE_YAW_OFFSET;
         wrapper.add(model);
 

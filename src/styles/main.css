@@ -958,9 +958,35 @@ body.level-celebration-flash::after {
     color: var(--primary-color);
     font-size: 16px;
 }
+.control-group.disabled-control {
+    opacity: 0.56;
+}
 .control-group input[type="range"] {
     width: 150px;
     cursor: pointer;
+}
+.segmented-control {
+    background: rgba(15, 118, 110, 0.12);
+    border: 1px solid rgba(15, 118, 110, 0.22);
+    border-radius: 8px;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    overflow: hidden;
+    width: 150px;
+}
+.camera-mode-btn {
+    background: transparent;
+    border: 0;
+    color: var(--primary-color);
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 800;
+    min-height: 36px;
+    padding: 0 8px;
+}
+.camera-mode-btn.active {
+    background: var(--primary-color);
+    color: #fff;
 }
 /* --- END: Third Person Controls --- */
 
