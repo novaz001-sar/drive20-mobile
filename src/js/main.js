@@ -103,7 +103,7 @@ const FALLBACK_FLOOR_TEXTURE_URL = './src/assets/floor-cell.png?v=20260620-4';
 const GOAL_MARKER_BASE_Y = WALL_HEIGHT / 2 - 1.5;
 const TRIPO_TECH_GOAL_HEIGHT = 4.1;
 const TRIPO_TECH_GOAL_FLOOR_CLEARANCE = 0.32;
-const TRIPO_TECH_LUCKY_CAT_URL = './src/assets/models/optimized/tripo-tech-lucky-cat.glb?v=20260624-tripo-color-height';
+const WAYPOINT_MANEKI_NEKO_URL = './src/assets/models/optimized/waypoint-maneki-neko.glb?v=20260624-maneki-replace';
 let defaultFloorTexturePromise = null;
 let tripoTechLuckyCatPromise = null;
 const tripoGoalBox = new THREE.Box3();
@@ -2053,7 +2053,7 @@ function createLuckyCat() {
 function loadTripoTechLuckyCatSource() {
     if (!tripoTechLuckyCatPromise) {
         const loader = new GLTFLoader();
-        tripoTechLuckyCatPromise = loader.loadAsync(TRIPO_TECH_LUCKY_CAT_URL).then((gltf) => {
+        tripoTechLuckyCatPromise = loader.loadAsync(WAYPOINT_MANEKI_NEKO_URL).then((gltf) => {
             const source = gltf.scene || gltf.scenes?.[0];
             if (!source) throw new Error('Tripo tech lucky cat GLB did not contain a scene.');
 
@@ -2063,7 +2063,7 @@ function loadTripoTechLuckyCatSource() {
                 child.castShadow = false;
                 child.receiveShadow = true;
                 child.frustumCulled = true;
-                applyTechLuckyCatVertexColors(child);
+                prepareWaypointGoalCatMesh(child);
             });
             return source;
         }).catch((error) => {
@@ -2073,6 +2073,31 @@ function loadTripoTechLuckyCatSource() {
         });
     }
     return tripoTechLuckyCatPromise;
+}
+
+function prepareWaypointGoalCatMesh(mesh) {
+    const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    const hasTextureMaterial = materials.some((material) => Boolean(
+        material?.map ||
+        material?.normalMap ||
+        material?.metalnessMap ||
+        material?.roughnessMap ||
+        material?.metalnessRoughnessMap
+    ));
+
+    if (!hasTextureMaterial) {
+        applyTechLuckyCatVertexColors(mesh);
+        return;
+    }
+
+    materials.filter(Boolean).forEach((material) => {
+        if ('metalness' in material) material.metalness = Math.max(material.metalness ?? 0.18, 0.22);
+        if ('roughness' in material) material.roughness = Math.min(Math.max(material.roughness ?? 0.34, 0.24), 0.58);
+        if ('emissive' in material) material.emissive = new THREE.Color(0x06182a);
+        if ('emissiveIntensity' in material) material.emissiveIntensity = 0.045;
+        material.depthWrite = true;
+        material.needsUpdate = true;
+    });
 }
 
 function applyTechLuckyCatVertexColors(mesh) {
