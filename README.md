@@ -14,6 +14,22 @@
 
 https://novaz001-sar.github.io/drive20-mobile/
 
+## 本地打开
+
+不要直接双击 `index.html` 或用 `file:///.../index.html` 打开。项目使用 ES module、importmap 和 GLB 模型资源，浏览器会拦截 `file://` 模块加载并产生 CORS 报错。
+
+在 PowerShell 中运行：
+
+```powershell
+.\open-local.ps1
+```
+
+然后使用脚本打开的本地地址：
+
+```text
+http://127.0.0.1:8080/index.html
+```
+
 ## Android APK
 
 本项目已经包含 Android WebView 打包工程，位于 `android-apk/`。生成可安装 APK：
