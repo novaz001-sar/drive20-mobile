@@ -107,6 +107,13 @@ const FREE_WAYPOINT_MARKER_HEIGHT = 2.35;
 const FREE_WAYPOINT_MARKER_FLOOR_CLEARANCE = 0.16;
 const PLAYER_VEHICLE_TARGET_LENGTH = TILE_SIZE * 0.78;
 const PLAYER_VEHICLE_YAW_OFFSET = Math.PI / 2;
+const DEFAULT_ASSET_SIZES = Object.freeze({
+    goal: 1,
+    waypoint: 1,
+    freeWaypoint: 1
+});
+const EDITOR_ASSET_SIZE_MIN = 0.5;
+const EDITOR_ASSET_SIZE_MAX = 1.8;
 let defaultFloorTexturePromise = null;
 let waypointGoalModelPromise = null;
 let freeWaypointMarkerPromise = null;
@@ -150,6 +157,22 @@ try {
 
 function prefersMobilePerformance() {
     return window.matchMedia('(pointer: coarse)').matches || window.innerWidth <= 900;
+}
+
+function clampAssetSize(value, fallback = 1) {
+    const parsed = Number(value);
+    const baseValue = Number.isFinite(parsed) ? parsed : fallback;
+    const clamped = Math.min(EDITOR_ASSET_SIZE_MAX, Math.max(EDITOR_ASSET_SIZE_MIN, baseValue));
+    return Math.round(clamped * 100) / 100;
+}
+
+function getLevelAssetSizes(level) {
+    const source = level?.assetSizes || {};
+    return {
+        goal: clampAssetSize(source.goal, DEFAULT_ASSET_SIZES.goal),
+        waypoint: clampAssetSize(source.waypoint, DEFAULT_ASSET_SIZES.waypoint),
+        freeWaypoint: clampAssetSize(source.freeWaypoint, DEFAULT_ASSET_SIZES.freeWaypoint)
+    };
 }
 
 function isPortraitTouchScreen() {
@@ -781,6 +804,7 @@ function setupUI() {
         playerInfo.gender = document.getElementById('gender-select').value;
         document.getElementById('startup-modal').style.display = 'none';
         document.getElementById('main-menu-modal').style.display = 'flex';
+        document.getElementById('custom-mode-btn').disabled = !customLevels.some(level => level !== null);
         updateUIText();
         gameState = 'MAIN_MENU';
     });
@@ -1174,12 +1198,13 @@ function loadLevel(levelData) {
     };
     lastWaypointSoundToken = null;
 
+    const assetSizes = getLevelAssetSizes(level);
     createMazeMesh(level.grid, level.goal);
     placeRoadsideObjects(level.grid);
-    createGoalMarker(level.goal);
+    createGoalMarker(level.goal, assetSizes);
     if (level.waypoints && level.waypoints.length > 0) {
         level.waypoints.forEach((wp, index) => {
-            const waypointMesh = createWaypointMesh(index + 1, wp.color);
+            const waypointMesh = createWaypointMesh(index + 1, wp.color, assetSizes.waypoint);
             waypointMesh.userData.kind = 'numberedWaypoint';
             waypointMesh.userData.waypointIndex = index;
             const wpPos = gridToWorld(wp.x, wp.z, level.grid);
@@ -1189,7 +1214,7 @@ function loadLevel(levelData) {
     }
     if (currentLevelState.isWaypointMode && level.freeWaypoints && level.freeWaypoints.length > 0) {
         level.freeWaypoints.forEach((wp, index) => {
-            const freeWaypointMesh = createFreeWaypointMarker(index);
+            const freeWaypointMesh = createFreeWaypointMarker(index, assetSizes.freeWaypoint);
             const wpPos = gridToWorld(wp.x, wp.z, level.grid);
             freeWaypointMesh.position.set(wpPos.x, 0, wpPos.z);
             waypointsGroup.add(freeWaypointMesh);
@@ -2212,8 +2237,9 @@ function createPlayerFormulaRacingCarAsset() {
     return wrapper;
 }
 
-function createWaypointGoalModelInstance(source) {
-    return createScaledStandaloneModel(source, WAYPOINT_GOAL_ASSET_HEIGHT, 'waypointPurpleCreatureGoal', 'waypointPurpleCreatureModel');
+function createWaypointGoalModelInstance(source, assetSize = 1) {
+    const goalAssetSize = clampAssetSize(assetSize, DEFAULT_ASSET_SIZES.goal);
+    return createScaledStandaloneModel(source, WAYPOINT_GOAL_ASSET_HEIGHT * goalAssetSize, 'waypointPurpleCreatureGoal', 'waypointPurpleCreatureModel');
 }
 
 function createScaledStandaloneModel(source, targetHeight, wrapperName, modelName) {
@@ -2241,7 +2267,8 @@ function createScaledStandaloneModel(source, targetHeight, wrapperName, modelNam
     return wrapper;
 }
 
-function createFreeWaypointMarker(index) {
+function createFreeWaypointMarker(index, assetSize = 1) {
+    const freeWaypointAssetSize = clampAssetSize(assetSize, DEFAULT_ASSET_SIZES.freeWaypoint);
     const marker = new THREE.Group();
     marker.name = `freeWaypointMarker_${index + 1}`;
     marker.userData.kind = 'freeWaypoint';
@@ -2252,7 +2279,7 @@ function createFreeWaypointMarker(index) {
         if (!source || !marker.parent || marker.userData.collected) return;
         const markerModel = createScaledStandaloneModel(
             source,
-            FREE_WAYPOINT_MARKER_HEIGHT,
+            FREE_WAYPOINT_MARKER_HEIGHT * freeWaypointAssetSize,
             'freeWaypointMarkerModelRoot',
             'freeWaypointMarkerModel'
         );
@@ -2263,8 +2290,9 @@ function createFreeWaypointMarker(index) {
     return marker;
 }
 
-function attachWaypointGoalModelToGoal(marker, loadingPlaceholder) {
+function attachWaypointGoalModelToGoal(marker, loadingPlaceholder, assetSize = 1) {
     const requestId = Symbol('waypoint-goal-model');
+    const goalAssetSize = clampAssetSize(assetSize, DEFAULT_ASSET_SIZES.goal);
     marker.userData.tripoGoalRequestId = requestId;
     marker.userData.tripoGoalLoading = true;
 
@@ -2273,7 +2301,7 @@ function attachWaypointGoalModelToGoal(marker, loadingPlaceholder) {
             return;
         }
 
-        const waypointGoalModel = createWaypointGoalModelInstance(source);
+        const waypointGoalModel = createWaypointGoalModelInstance(source, goalAssetSize);
         waypointGoalModel.position.y = WAYPOINT_GOAL_FLOOR_CLEARANCE - GOAL_MARKER_BASE_Y;
 
         if (loadingPlaceholder?.parent === marker) marker.remove(loadingPlaceholder);
@@ -2286,10 +2314,11 @@ function attachWaypointGoalModelToGoal(marker, loadingPlaceholder) {
     });
 }
 
-function createGoalMarker(goalCoords) {
+function createGoalMarker(goalCoords, assetSizes = DEFAULT_ASSET_SIZES) {
     const level = (currentLevelIndex === -1) ? customLevels[selectedCustomMapIndex] : levels[currentLevelIndex];
     const goalPos = gridToWorld(goalCoords.x, goalCoords.z, level.grid);
     const isTechGoal = currentLevelState.isWaypointMode;
+    const goalAssetSize = clampAssetSize(assetSizes.goal, DEFAULT_ASSET_SIZES.goal);
     luckyCatArm = null;
     luckyCatWrist = null;
     floatingHeart = null;
@@ -2300,10 +2329,10 @@ function createGoalMarker(goalCoords) {
         cat = new THREE.Group();
         cat.name = 'waypointGoalLoadingPlaceholder';
         goalMarker.add(cat);
-        attachWaypointGoalModelToGoal(goalMarker, cat);
+        attachWaypointGoalModelToGoal(goalMarker, cat, goalAssetSize);
     } else {
         cat = createLuckyCat();
-        cat.scale.set(1.5, 1.5, 1.5);
+        cat.scale.setScalar(1.5 * goalAssetSize);
         goalMarker.add(cat);
 
         const heartShape = new THREE.Shape();
@@ -2316,7 +2345,7 @@ function createGoalMarker(goalCoords) {
             depthWrite: true
         });
         const heart = new THREE.Mesh(heartGeo, heartMat);
-        heart.position.set(0, 6.2, 0.2); heart.rotation.x = Math.PI; heart.scale.set(0.9, 0.9, 0.9);
+        heart.position.set(0, 6.2 * goalAssetSize, 0.2); heart.rotation.x = Math.PI; heart.scale.setScalar(0.9 * goalAssetSize);
         goalMarker.add(heart);
         floatingHeart = heart;
         floatingHeart.userData.baseY = heart.position.y;
@@ -2326,7 +2355,8 @@ function createGoalMarker(goalCoords) {
     scene.add(goalMarker);
 }
 
-function createWaypointMesh(number, color = '#8A2BE2') {
+function createWaypointMesh(number, color = '#8A2BE2', assetSize = 1) {
+    const waypointAssetSize = clampAssetSize(assetSize, DEFAULT_ASSET_SIZES.waypoint);
     const group = new THREE.Group();
     group.userData.collected = false; // Mark as not collected initially
     const gemColor = new THREE.Color(color);
@@ -2349,7 +2379,7 @@ function createWaypointMesh(number, color = '#8A2BE2') {
     gem.name = 'waypoint_gem';
     group.add(gem);
 
-    const light = new THREE.PointLight(gemColor, 3, TILE_SIZE * 0.8);
+    const light = new THREE.PointLight(gemColor, 3 * waypointAssetSize, TILE_SIZE * 0.8 * waypointAssetSize);
     light.position.y = 1;
     group.add(light);
     
@@ -2372,7 +2402,8 @@ function createWaypointMesh(number, color = '#8A2BE2') {
             this.quaternion.copy(camera.quaternion);
         };
     }
-    group.position.y = 0.15;
+    group.scale.setScalar(waypointAssetSize);
+    group.position.y = 0.15 * waypointAssetSize;
     return group;
 }
 
@@ -3476,6 +3507,7 @@ function resetGame() {
 
 let editorState = {
     gridData: [], start: {}, goal: {}, waypoints: [], freeWaypoints: [], highlightFloors: [],
+    assetSizes: { ...DEFAULT_ASSET_SIZES },
     isWaypointMode: false, currentTool: 'wall', isDrawing: false
 };
 let selectedCustomMapIndex = 0;
@@ -3494,6 +3526,42 @@ function loadCustomLevels() {
 
 function saveCustomLevels() {
     localStorage.setItem('customMazeLevels_v2', JSON.stringify(customLevels));
+}
+
+function getEditorAssetSizeControls() {
+    return [
+        { key: 'goal', inputId: 'editor-goal-size-slider', outputId: 'editor-goal-size-value' },
+        { key: 'waypoint', inputId: 'editor-waypoint-size-slider', outputId: 'editor-waypoint-size-value' },
+        { key: 'freeWaypoint', inputId: 'editor-free-waypoint-size-slider', outputId: 'editor-free-waypoint-size-value' }
+    ];
+}
+
+function formatAssetSizePercent(value) {
+    return `${Math.round(clampAssetSize(value) * 100)}%`;
+}
+
+function syncEditorAssetSizeControls() {
+    editorState.assetSizes = getLevelAssetSizes({ assetSizes: editorState.assetSizes });
+    getEditorAssetSizeControls().forEach(({ key, inputId, outputId }) => {
+        const input = document.getElementById(inputId);
+        const output = document.getElementById(outputId);
+        const value = editorState.assetSizes[key];
+        if (input) input.value = String(value);
+        if (output) output.textContent = formatAssetSizePercent(value);
+    });
+}
+
+function bindEditorAssetSizeControls() {
+    getEditorAssetSizeControls().forEach(({ key, inputId, outputId }) => {
+        const input = document.getElementById(inputId);
+        const output = document.getElementById(outputId);
+        if (!input) return;
+        input.oninput = () => {
+            editorState.assetSizes = getLevelAssetSizes({ assetSizes: editorState.assetSizes });
+            editorState.assetSizes[key] = clampAssetSize(input.value, DEFAULT_ASSET_SIZES[key]);
+            if (output) output.textContent = formatAssetSizePercent(editorState.assetSizes[key]);
+        };
+    });
 }
 
 function showEditor(slotIndex = 0) {
@@ -3584,6 +3652,7 @@ function initEditor(slotIndex = 0) {
     document.getElementById('editor-back-btn').onclick = () => {
         document.getElementById('editor-modal').style.display = 'none'; showMainMenu();
     };
+    bindEditorAssetSizeControls();
     setEditorMode('custom');
 }
 
@@ -3591,6 +3660,7 @@ function loadEditorGrid(index, mode) {
     const levelToLoad = (mode === 'custom') ? customLevels[index] : levels[index];
     editorState = {
         gridData: [], start: {}, goal: {}, waypoints: [], freeWaypoints: [], highlightFloors: [],
+        assetSizes: { ...DEFAULT_ASSET_SIZES },
         isWaypointMode: false, currentTool: 'wall', isDrawing: false
     };
     document.querySelectorAll('#editor-tools button').forEach(b=>b.classList.remove('selected'));
@@ -3607,11 +3677,13 @@ function loadEditorGrid(index, mode) {
         editorState.waypoints = levelToLoad.waypoints ? JSON.parse(JSON.stringify(levelToLoad.waypoints)) : [];
         editorState.freeWaypoints = levelToLoad.freeWaypoints ? JSON.parse(JSON.stringify(levelToLoad.freeWaypoints)) : [];
         editorState.highlightFloors = levelToLoad.highlightFloors ? JSON.parse(JSON.stringify(levelToLoad.highlightFloors)) : [];
+        editorState.assetSizes = getLevelAssetSizes(levelToLoad);
     } else {
         sourceWidth = sourceHeight = EDITOR_SIZE;
     }
 
     document.getElementById('editor-waypoint-mode-toggle').checked = editorState.isWaypointMode;
+    syncEditorAssetSizeControls();
 
     const xOffset = Math.floor((EDITOR_SIZE - sourceWidth) / 2);
     const zOffset = Math.floor((EDITOR_SIZE - sourceHeight) / 2);
@@ -3757,7 +3829,8 @@ function saveCustomMap() {
         isWaypointMode: document.getElementById('editor-waypoint-mode-toggle').checked,
         waypoints: waypoints,
         freeWaypoints: freeWaypoints,
-        highlightFloors: highlightFloors
+        highlightFloors: highlightFloors,
+        assetSizes: getLevelAssetSizes({ assetSizes: editorState.assetSizes })
     };
     if (newLevel.start.x === 0) newLevel.start.dir = 'E'; else if (newLevel.start.x === EDITOR_SIZE - 1) newLevel.start.dir = 'W';
     else if (newLevel.start.z === 0) newLevel.start.dir = 'S'; else if (newLevel.start.z === EDITOR_SIZE - 1) newLevel.start.dir = 'N';

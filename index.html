@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#0f766e">
     <title>Happy Drive Mobile</title>
     <link rel="preload" as="image" href="./src/assets/floor-cell-mobile-512.webp?v=20260620-4" type="image/webp" fetchpriority="high">
-    <link rel="stylesheet" href="./src/styles/main.css?v=20260624-free-waypoint">
+    <link rel="stylesheet" href="./src/styles/main.css?v=20260625-asset-sizes">
 </head>
 <body>
     <div id="game-container"></div>
@@ -271,6 +271,23 @@
                         <input type="color" id="editor-waypoint-color" value="#8A2BE2">
                     </label>
                 </div>
+                <div class="editor-row" id="editor-asset-size-controls">
+                    <label class="editor-size-control" for="editor-goal-size-slider">
+                        <span data-lang-zh="终点大小" data-lang-en="Goal Size">Goal Size</span>
+                        <input type="range" id="editor-goal-size-slider" min="0.5" max="1.8" step="0.05" value="1">
+                        <output id="editor-goal-size-value" for="editor-goal-size-slider">100%</output>
+                    </label>
+                    <label class="editor-size-control" for="editor-waypoint-size-slider">
+                        <span data-lang-zh="数字路标大小" data-lang-en="Numbered Waypoint Size">Numbered Waypoint Size</span>
+                        <input type="range" id="editor-waypoint-size-slider" min="0.5" max="1.8" step="0.05" value="1">
+                        <output id="editor-waypoint-size-value" for="editor-waypoint-size-slider">100%</output>
+                    </label>
+                    <label class="editor-size-control" for="editor-free-waypoint-size-slider">
+                        <span data-lang-zh="自由路标大小" data-lang-en="Free Mark Size">Free Mark Size</span>
+                        <input type="range" id="editor-free-waypoint-size-slider" min="0.5" max="1.8" step="0.05" value="1">
+                        <output id="editor-free-waypoint-size-value" for="editor-free-waypoint-size-slider">100%</output>
+                    </label>
+                </div>
             </div>
             <div id="editor-grid"></div>
             <p id="editor-message" style="color: red; min-height: 1.2em;"></p>
@@ -357,6 +374,6 @@
             }
         }
     </script>
-    <script type="module" src="./src/js/main.js?v=20260624-formula-car"></script>
+    <script type="module" src="./src/js/main.js?v=20260625-asset-sizes"></script>
 </body>
 </html>
