@@ -13,3 +13,23 @@
 部署地址：
 
 https://novaz001-sar.github.io/drive20-mobile/
+
+## Android APK
+
+本项目已经包含 Android WebView 打包工程，位于 `android-apk/`。生成可安装 APK：
+
+```powershell
+.\android-apk\build-apk.ps1
+```
+
+输出文件：
+
+```text
+android-apk/dist/HappyDriveMobile-debug.apk
+```
+
+连接 Android 设备后安装：
+
+```powershell
+adb install -r .\android-apk\dist\HappyDriveMobile-debug.apk
+```

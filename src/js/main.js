@@ -242,7 +242,7 @@ async function init() {
     
     fontLoader = new FontLoader();
     try {
-        const font = await fontLoader.loadAsync('https://threejs.org/examples/fonts/helvetiker_regular.typeface.json');
+        const font = await fontLoader.loadAsync('./src/assets/vendor/three/examples/fonts/helvetiker_regular.typeface.json?v=20260624-apk');
         helveticaFont = font;
         console.log("Font loaded successfully.");
     } catch (error) {
