@@ -100,7 +100,10 @@ let hintTimeout;
 let currentEditorMode = 'custom';
 const DEFAULT_FLOOR_TEXTURE_URL = './src/assets/floor-cell-mobile-512.webp?v=20260620-4';
 const FALLBACK_FLOOR_TEXTURE_URL = './src/assets/floor-cell.png?v=20260620-4';
-const TRIPO_TECH_LUCKY_CAT_URL = './src/assets/models/optimized/tripo-tech-lucky-cat.glb?v=20260624-tripo-goal';
+const GOAL_MARKER_BASE_Y = WALL_HEIGHT / 2 - 1.5;
+const TRIPO_TECH_GOAL_HEIGHT = 4.1;
+const TRIPO_TECH_GOAL_FLOOR_CLEARANCE = 0.32;
+const TRIPO_TECH_LUCKY_CAT_URL = './src/assets/models/optimized/tripo-tech-lucky-cat.glb?v=20260624-tripo-color-height';
 let defaultFloorTexturePromise = null;
 let tripoTechLuckyCatPromise = null;
 const tripoGoalBox = new THREE.Box3();
@@ -1505,7 +1508,7 @@ function animate() {
 
     // Object animations (Lucky Cat, Heart, Waypoints)
     if (goalMarker) {
-        goalMarker.position.y = WALL_HEIGHT/2 - 1.5 + Math.sin(elapsedTime) * 0.2;
+        goalMarker.position.y = GOAL_MARKER_BASE_Y + Math.sin(elapsedTime) * 0.2;
         goalMarker.rotation.y += delta * 0.4;
         if (luckyCatArm) {
             const toRad = THREE.MathUtils.degToRad;
@@ -2060,13 +2063,7 @@ function loadTripoTechLuckyCatSource() {
                 child.castShadow = false;
                 child.receiveShadow = true;
                 child.frustumCulled = true;
-                const materials = Array.isArray(child.material) ? child.material : [child.material];
-                materials.filter(Boolean).forEach((material) => {
-                    if ('roughness' in material) material.roughness = Math.max(material.roughness ?? 0.28, 0.34);
-                    if ('metalness' in material) material.metalness = Math.min(material.metalness ?? 0.18, 0.38);
-                    material.depthWrite = true;
-                    material.needsUpdate = true;
-                });
+                applyTechLuckyCatVertexColors(child);
             });
             return source;
         }).catch((error) => {
@@ -2076,6 +2073,65 @@ function loadTripoTechLuckyCatSource() {
         });
     }
     return tripoTechLuckyCatPromise;
+}
+
+function applyTechLuckyCatVertexColors(mesh) {
+    const geometry = mesh.geometry;
+    const position = geometry?.attributes?.position;
+    if (!geometry || !position) return;
+
+    if (!geometry.userData.tripoTechVertexColorsApplied) {
+        geometry.computeBoundingBox();
+        const box = geometry.boundingBox;
+        const height = Math.max(box.max.y - box.min.y, 0.001);
+        const width = Math.max(box.max.x - box.min.x, 0.001);
+        const depth = Math.max(box.max.z - box.min.z, 0.001);
+        const colors = new Float32Array(position.count * 3);
+        const color = new THREE.Color();
+        const sideAccent = new THREE.Color();
+        const frontHighlight = new THREE.Color(0xffffff);
+        const baseShadow = new THREE.Color(0x6b7280);
+
+        for (let i = 0; i < position.count; i++) {
+            const xNorm = (position.getX(i) - box.min.x) / width;
+            const yNorm = (position.getY(i) - box.min.y) / height;
+            const zNorm = (position.getZ(i) - box.min.z) / depth;
+
+            if (yNorm < 0.16) {
+                color.set(0x9be7ff);
+            } else if (yNorm < 0.34) {
+                color.set(0xffb5d1);
+            } else if (yNorm < 0.70) {
+                color.set(0xf7f8ff);
+            } else {
+                color.set(0xc9f4ff);
+            }
+
+            sideAccent.set(xNorm < 0.5 ? 0x77f7ff : 0xff78c8);
+            color.lerp(sideAccent, 0.10 + Math.abs(xNorm - 0.5) * 0.26);
+            if (zNorm > 0.62) color.lerp(frontHighlight, 0.10);
+            if (yNorm < 0.08) color.lerp(baseShadow, 0.18);
+
+            colors[i * 3] = color.r;
+            colors[i * 3 + 1] = color.g;
+            colors[i * 3 + 2] = color.b;
+        }
+
+        geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+        geometry.userData.tripoTechVertexColorsApplied = true;
+    }
+
+    mesh.material = new THREE.MeshPhysicalMaterial({
+        color: 0xffffff,
+        vertexColors: true,
+        metalness: 0.34,
+        roughness: 0.27,
+        clearcoat: 0.9,
+        clearcoatRoughness: 0.14,
+        emissive: 0x06182a,
+        emissiveIntensity: 0.12,
+        side: THREE.FrontSide
+    });
 }
 
 function createTripoTechLuckyCatInstance(source) {
@@ -2091,16 +2147,20 @@ function createTripoTechLuckyCatInstance(source) {
     if (!tripoGoalBox.isEmpty()) {
         tripoGoalBox.getSize(tripoGoalSize);
         tripoGoalBox.getCenter(tripoGoalCenter);
-        model.position.sub(tripoGoalCenter);
         const sourceHeight = Math.max(tripoGoalSize.y, 0.001);
-        const targetLocalHeight = 4.1;
-        model.scale.setScalar(targetLocalHeight / sourceHeight);
+        const sourceScale = TRIPO_TECH_GOAL_HEIGHT / sourceHeight;
+        model.scale.setScalar(sourceScale);
+        model.position.set(
+            -tripoGoalCenter.x * sourceScale,
+            -tripoGoalBox.min.y * sourceScale,
+            -tripoGoalCenter.z * sourceScale
+        );
     }
 
     const orbitMaterial = new THREE.MeshBasicMaterial({
-        color: 0xff7fc4,
+        color: 0x67e8f9,
         transparent: true,
-        opacity: 0.46,
+        opacity: 0.54,
         blending: THREE.AdditiveBlending,
         depthWrite: false,
         side: THREE.DoubleSide
@@ -2111,13 +2171,56 @@ function createTripoTechLuckyCatInstance(source) {
     orbit.rotation.x = Math.PI / 2;
     wrapper.add(orbit);
 
-    const accentLight = new THREE.PointLight(0xff8ac8, 1.15, 18, 1.45);
+    const visorMaterial = new THREE.MeshBasicMaterial({
+        color: 0x071426,
+        transparent: true,
+        opacity: 0.72,
+        depthWrite: false
+    });
+    const visorGlowMaterial = new THREE.MeshBasicMaterial({
+        color: 0xff5ec4,
+        transparent: true,
+        opacity: 0.72,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
+    });
+    const visor = new THREE.Mesh(new THREE.BoxGeometry(1.26, 0.18, 0.055), visorMaterial);
+    visor.name = 'tripoTechGoalVisor';
+    visor.position.set(0, 3.05, 2.08);
+    wrapper.add(visor);
+    const visorGlow = new THREE.Mesh(new THREE.BoxGeometry(1.42, 0.035, 0.065), visorGlowMaterial);
+    visorGlow.name = 'tripoTechGoalVisorGlow';
+    visorGlow.position.set(0, 3.05, 2.12);
+    wrapper.add(visorGlow);
+
+    const badgeMaterial = new THREE.MeshBasicMaterial({
+        color: 0x8df7ff,
+        transparent: true,
+        opacity: 0.66,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        side: THREE.DoubleSide
+    });
+    const badge = new THREE.Mesh(new THREE.TorusGeometry(0.28, 0.018, 8, 36), badgeMaterial);
+    badge.name = 'tripoTechGoalChestBadge';
+    badge.position.set(0, 2.02, 2.08);
+    wrapper.add(badge);
+
+    const baseGlow = new THREE.Mesh(new THREE.TorusGeometry(1.52, 0.035, 8, 72), badgeMaterial);
+    baseGlow.name = 'tripoTechGoalBaseGlow';
+    baseGlow.position.y = 0.08;
+    baseGlow.rotation.x = Math.PI / 2;
+    wrapper.add(baseGlow);
+
+    const accentLight = new THREE.PointLight(0xff8ac8, 1.45, 18, 1.45);
     accentLight.position.set(0, 2.0, 1.65);
     wrapper.add(accentLight);
 
     wrapper.userData.halo = orbit;
     wrapper.userData.pulseParts = [
-        { material: orbitMaterial, baseOpacity: 0.34, pulseOpacity: 0.28, phase: 0.4, speed: 3.8, light: accentLight, baseIntensity: 0.72, pulseIntensity: 0.82 }
+        { material: orbitMaterial, baseOpacity: 0.40, pulseOpacity: 0.30, phase: 0.4, speed: 3.8, light: accentLight, baseIntensity: 0.82, pulseIntensity: 0.92 },
+        { material: visorGlowMaterial, baseOpacity: 0.48, pulseOpacity: 0.30, phase: 1.2, speed: 4.6 },
+        { material: badgeMaterial, baseOpacity: 0.44, pulseOpacity: 0.26, phase: 2.0, speed: 4.0 }
     ];
     return wrapper;
 }
@@ -2133,7 +2236,9 @@ function attachTripoTechLuckyCatToGoal(marker, fallbackCat) {
         }
 
         const tripoCat = createTripoTechLuckyCatInstance(source);
-        tripoCat.scale.setScalar(fallbackCat?.scale?.x || 1.5);
+        const tripoScale = fallbackCat?.scale?.x || 1.5;
+        tripoCat.scale.setScalar(tripoScale);
+        tripoCat.position.y = TRIPO_TECH_GOAL_FLOOR_CLEARANCE - GOAL_MARKER_BASE_Y;
 
         if (fallbackCat?.parent === marker) marker.remove(fallbackCat);
         marker.add(tripoCat);
@@ -2200,7 +2305,7 @@ function createGoalMarker(goalCoords) {
         techGoalPulseParts.push({ material: heartMat, baseOpacity: 0.68, pulseOpacity: 0.28, phase: 2.1, speed: 4.1 });
     }
     goalMarker.position.copy(goalPos);
-    goalMarker.position.y = WALL_HEIGHT/2 - 1.5;
+    goalMarker.position.y = GOAL_MARKER_BASE_Y;
     scene.add(goalMarker);
 }
 
