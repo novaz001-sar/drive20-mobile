@@ -100,7 +100,7 @@ const FALLBACK_FLOOR_TEXTURE_URL = './src/assets/floor-cell.png?v=20260620-4';
 const GOAL_MARKER_BASE_Y = WALL_HEIGHT / 2 - 1.5;
 const WAYPOINT_GOAL_ASSET_HEIGHT = 4.6;
 const WAYPOINT_GOAL_FLOOR_CLEARANCE = 0.26;
-const WAYPOINT_MANEKI_NEKO_URL = './src/assets/models/optimized/waypoint-maneki-neko.glb?v=20260624-futuristic-only';
+const WAYPOINT_MANEKI_NEKO_URL = './src/assets/models/optimized/waypoint-maneki-neko.glb?v=20260624-maneki-cat-only';
 let defaultFloorTexturePromise = null;
 let waypointGoalCatPromise = null;
 const tripoGoalBox = new THREE.Box3();
