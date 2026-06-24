@@ -102,10 +102,11 @@ const WAYPOINT_GOAL_ASSET_HEIGHT = 4.6;
 const WAYPOINT_GOAL_FLOOR_CLEARANCE = 0.26;
 const WAYPOINT_GOAL_MODEL_URL = './src/assets/models/optimized/waypoint-goal-purple-creature.glb?v=20260624-purple-creature-goal';
 const FREE_WAYPOINT_MARKER_URL = './src/assets/models/optimized/free-waypoint-marker.glb?v=20260624-free-waypoint';
-const PLAYER_VEHICLE_MODEL_URL = './src/assets/models/optimized/player-pickup-truck.glb?v=20260624-pickup-truck';
+const PLAYER_VEHICLE_MODEL_URL = './src/assets/models/optimized/player-formula-racing-car.glb?v=20260624-formula-car';
 const FREE_WAYPOINT_MARKER_HEIGHT = 2.35;
 const FREE_WAYPOINT_MARKER_FLOOR_CLEARANCE = 0.16;
 const PLAYER_VEHICLE_TARGET_LENGTH = TILE_SIZE * 0.78;
+const PLAYER_VEHICLE_YAW_OFFSET = Math.PI / 2;
 let defaultFloorTexturePromise = null;
 let waypointGoalModelPromise = null;
 let freeWaypointMarkerPromise = null;
@@ -284,7 +285,7 @@ async function init() {
     scene.add(player);
     
     // Initialize Player Car Model for 3P view (v10.0)
-    playerCarModel = createPlayerPickupTruckAsset();
+    playerCarModel = createPlayerFormulaRacingCarAsset();
     player.add(playerCarModel);
     
     // Camera setup (Parented to player) (v10.0)
@@ -2160,7 +2161,7 @@ function loadPlayerVehicleSource() {
             const source = gltf.scene || gltf.scenes?.[0];
             if (!source) throw new Error('Player vehicle GLB did not contain a scene.');
 
-            source.name = 'playerPickupTruckSource';
+            source.name = 'playerFormulaRacingCarSource';
             source.traverse((child) => {
                 if (!child.isMesh) return;
                 child.castShadow = false;
@@ -2170,7 +2171,7 @@ function loadPlayerVehicleSource() {
             });
             return source;
         }).catch((error) => {
-            console.warn('Failed to load player pickup truck model.', error);
+            console.warn('Failed to load player formula racing car model.', error);
             playerVehicleModelPromise = null;
             return null;
         });
@@ -2178,14 +2179,15 @@ function loadPlayerVehicleSource() {
     return playerVehicleModelPromise;
 }
 
-function createPlayerPickupTruckAsset() {
+function createPlayerFormulaRacingCarAsset() {
     const wrapper = new THREE.Group();
-    wrapper.name = 'playerPickupTruckAsset';
+    wrapper.name = 'playerFormulaRacingCarAsset';
 
     loadPlayerVehicleSource().then((source) => {
         if (!source || !wrapper.parent) return;
         const model = source.clone(true);
-        model.name = 'playerPickupTruckModel';
+        model.name = 'playerFormulaRacingCarModel';
+        model.rotation.y = PLAYER_VEHICLE_YAW_OFFSET;
         wrapper.add(model);
 
         model.updateMatrixWorld(true);
