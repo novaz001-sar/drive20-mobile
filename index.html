@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#0f766e">
     <title>Happy Drive Mobile</title>
     <link rel="preload" as="image" href="./src/assets/floor-cell-mobile-512.webp?v=20260620-4" type="image/webp" fetchpriority="high">
-    <link rel="stylesheet" href="./src/styles/main.css?v=20260623-minimap-celebration">
+    <link rel="stylesheet" href="./src/styles/main.css?v=20260624-free-waypoint">
 </head>
 <body>
     <div id="game-container"></div>
@@ -258,6 +258,7 @@
                     <button id="tool-start" data-tool="start" data-lang-zh="起点" data-lang-en="Start">起点</button>
                     <button id="tool-goal" data-tool="goal" data-lang-zh="终点" data-lang-en="Goal">终点</button>
                     <button id="tool-waypoint" data-tool="waypoint" data-lang-zh="路标" data-lang-en="Waypoint">💎</button>
+                    <button id="tool-free-waypoint" data-tool="free-waypoint" data-lang-zh="自由路标" data-lang-en="Free Mark">★</button>
                     <button id="tool-highlight-floor" data-tool="highlight-floor" data-lang-zh="高亮地板" data-lang-en="Highlight Floor">✨</button>
                 </div>
                 <div class="editor-row" id="editor-options">
@@ -313,6 +314,10 @@
                         <span data-lang-zh="路标 (紫色菱形)" data-lang-en="Waypoint (Purple Diamond)">路标 (紫色菱形)</span>
                     </li>
                     <li>
+                        <span class="map-legend-swatch swatch-free-waypoint"></span>
+                        <span data-lang-zh="自由路标 (蓝色星标，可任意顺序触碰)" data-lang-en="Free Mark (Blue Star, any order)">自由路标 (蓝色星标，可任意顺序触碰)</span>
+                    </li>
+                    <li>
                         <span class="map-legend-swatch swatch-highlight-floor"></span>
                         <span data-lang-zh="高亮地板 (黄色方块)" data-lang-en="Highlight Floor (Yellow Square)">高亮地板 (黄色方块)</span>
                     </li>
@@ -352,6 +357,6 @@
             }
         }
     </script>
-    <script type="module" src="./src/js/main.js?v=20260624-maneki-cat-only"></script>
+    <script type="module" src="./src/js/main.js?v=20260624-free-waypoint"></script>
 </body>
 </html>

@@ -749,6 +749,26 @@ body.level-celebration-flash::after {
     border: 1px solid rgba(255,255,255,0.5);
     pointer-events: none;
 }
+.free-waypoint-marker {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 78%;
+    height: 78%;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 2.1vmin;
+    font-weight: 800;
+    color: #ffffff;
+    text-shadow: 0 1px 3px rgba(0,0,0,0.55);
+    background: #00aeea;
+    border: 2px solid #ffffff;
+    box-shadow: 0 0 0 2px rgba(0, 194, 255, 0.28);
+    pointer-events: none;
+}
 
 .lang-en { display: none; }
 
@@ -854,6 +874,7 @@ body.level-celebration-flash::after {
 .swatch-start { background-color: var(--start-color); }
 .swatch-goal { background-color: var(--goal-color); }
 .swatch-waypoint { background: #9400d3; } /* DarkViolet */
+.swatch-free-waypoint { background: #00c2ff; border-radius: 50%; }
 .swatch-highlight-floor { background-color: #ffc107; }
 
 #map-instructions-panel .instruction-text {

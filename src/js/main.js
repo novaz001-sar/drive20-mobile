@@ -52,6 +52,7 @@ let currentLevelState = {
     isWaypointMode: false,
     totalWaypoints: 0,
     nextWaypoint: 1,
+    touchedFreeWaypoints: new Set(),
     touchedHighlightFloors: new Set()
 };
 let activeFireworks = [];
@@ -101,8 +102,12 @@ const GOAL_MARKER_BASE_Y = WALL_HEIGHT / 2 - 1.5;
 const WAYPOINT_GOAL_ASSET_HEIGHT = 4.6;
 const WAYPOINT_GOAL_FLOOR_CLEARANCE = 0.26;
 const WAYPOINT_MANEKI_NEKO_URL = './src/assets/models/optimized/waypoint-maneki-neko.glb?v=20260624-maneki-cat-only';
+const FREE_WAYPOINT_MARKER_URL = './src/assets/models/optimized/free-waypoint-marker.glb?v=20260624-free-waypoint';
+const FREE_WAYPOINT_MARKER_HEIGHT = 2.35;
+const FREE_WAYPOINT_MARKER_FLOOR_CLEARANCE = 0.16;
 let defaultFloorTexturePromise = null;
 let waypointGoalCatPromise = null;
+let freeWaypointMarkerPromise = null;
 const tripoGoalBox = new THREE.Box3();
 const tripoGoalSize = new THREE.Vector3();
 const tripoGoalCenter = new THREE.Vector3();
@@ -616,7 +621,14 @@ function playDriveSound(kind) {
 }
 
 function playWaypointFoundSound(waypointIndex = currentLevelState.nextWaypoint) {
-    const token = `${currentLevelIndex}:${selectedCustomMapIndex}:${waypointIndex}`;
+    const token = `${currentLevelIndex}:${selectedCustomMapIndex}:numbered:${waypointIndex}`;
+    if (lastWaypointSoundToken === token) return;
+    lastWaypointSoundToken = token;
+    playDriveSound('waypoint');
+}
+
+function playFreeWaypointFoundSound(waypointIndex) {
+    const token = `${currentLevelIndex}:${selectedCustomMapIndex}:free:${waypointIndex}`;
     if (lastWaypointSoundToken === token) return;
     lastWaypointSoundToken = token;
     playDriveSound('waypoint');
@@ -1151,6 +1163,7 @@ function loadLevel(levelData) {
         isWaypointMode: level.isWaypointMode || false,
         totalWaypoints: level.waypoints ? level.waypoints.length : 0,
         nextWaypoint: 1,
+        touchedFreeWaypoints: new Set(),
         touchedHighlightFloors: new Set()
     };
     lastWaypointSoundToken = null;
@@ -1161,9 +1174,19 @@ function loadLevel(levelData) {
     if (level.waypoints && level.waypoints.length > 0) {
         level.waypoints.forEach((wp, index) => {
             const waypointMesh = createWaypointMesh(index + 1, wp.color);
+            waypointMesh.userData.kind = 'numberedWaypoint';
+            waypointMesh.userData.waypointIndex = index;
             const wpPos = gridToWorld(wp.x, wp.z, level.grid);
             waypointMesh.position.set(wpPos.x, 0, wpPos.z);
             waypointsGroup.add(waypointMesh);
+        });
+    }
+    if (currentLevelState.isWaypointMode && level.freeWaypoints && level.freeWaypoints.length > 0) {
+        level.freeWaypoints.forEach((wp, index) => {
+            const freeWaypointMesh = createFreeWaypointMarker(index);
+            const wpPos = gridToWorld(wp.x, wp.z, level.grid);
+            freeWaypointMesh.position.set(wpPos.x, 0, wpPos.z);
+            waypointsGroup.add(freeWaypointMesh);
         });
     }
     if (level.highlightFloors && level.highlightFloors.length > 0) {
@@ -1249,7 +1272,10 @@ function afterMoveChecks() {
     if (currentLevelState.isWaypointMode && currentLevelState.nextWaypoint <= currentLevelState.totalWaypoints) {
         const nextWpData = level.waypoints[currentLevelState.nextWaypoint - 1];
         if (gridPos.x === nextWpData.x && gridPos.z === nextWpData.z) {
-            const collectedWaypointMesh = waypointsGroup.children[currentLevelState.nextWaypoint - 1];
+            const collectedWaypointMesh = waypointsGroup.children.find((child) =>
+                child.userData.kind === 'numberedWaypoint' &&
+                child.userData.waypointIndex === currentLevelState.nextWaypoint - 1
+            );
             if (collectedWaypointMesh && !collectedWaypointMesh.userData.collected) {
                 collectedWaypointMesh.userData.collected = true;
 
@@ -1282,6 +1308,32 @@ function afterMoveChecks() {
                 updateMinimapPlayer(); 
             }
         }
+    }
+
+    // Free waypoint check: touch once, no required order, no effect on the numbered route.
+    if (currentLevelState.isWaypointMode && Array.isArray(level.freeWaypoints)) {
+        level.freeWaypoints.forEach((wp, index) => {
+            const waypointKey = `${index}:${wp.x},${wp.z}`;
+            if (currentLevelState.touchedFreeWaypoints.has(waypointKey)) return;
+            if (gridPos.x !== wp.x || gridPos.z !== wp.z) return;
+
+            currentLevelState.touchedFreeWaypoints.add(waypointKey);
+            const freeWaypointMesh = waypointsGroup.children.find((child) =>
+                child.userData.kind === 'freeWaypoint' &&
+                child.userData.waypointIndex === index
+            );
+            if (freeWaypointMesh) {
+                freeWaypointMesh.userData.collected = true;
+                freeWaypointMesh.visible = false;
+                createFireworkEffect(freeWaypointMesh.position, '#00c2ff');
+            } else {
+                createFireworkEffect(player.position, '#00c2ff');
+            }
+            playFreeWaypointFoundSound(index + 1);
+            minimapBgDirty = true;
+            lastMinimapRenderKey = '';
+            updateMinimapPlayer();
+        });
     }
     
     // Highlight Floor check
@@ -2062,6 +2114,31 @@ function loadWaypointGoalCatSource() {
     return waypointGoalCatPromise;
 }
 
+function loadFreeWaypointMarkerSource() {
+    if (!freeWaypointMarkerPromise) {
+        const loader = new GLTFLoader();
+        freeWaypointMarkerPromise = loader.loadAsync(FREE_WAYPOINT_MARKER_URL).then((gltf) => {
+            const source = gltf.scene || gltf.scenes?.[0];
+            if (!source) throw new Error('Free waypoint GLB did not contain a scene.');
+
+            source.name = 'freeWaypointMarkerSource';
+            source.traverse((child) => {
+                if (!child.isMesh) return;
+                child.castShadow = false;
+                child.receiveShadow = true;
+                child.frustumCulled = true;
+                prepareWaypointGoalCatMesh(child);
+            });
+            return source;
+        }).catch((error) => {
+            console.warn('Failed to load free waypoint marker model.', error);
+            freeWaypointMarkerPromise = null;
+            return null;
+        });
+    }
+    return freeWaypointMarkerPromise;
+}
+
 function prepareWaypointGoalCatMesh(mesh) {
     const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
 
@@ -2072,11 +2149,14 @@ function prepareWaypointGoalCatMesh(mesh) {
 }
 
 function createWaypointGoalCatInstance(source) {
-    const wrapper = new THREE.Group();
-    wrapper.name = 'waypointLuckyCatGoal';
+    return createScaledStandaloneModel(source, WAYPOINT_GOAL_ASSET_HEIGHT, 'waypointLuckyCatGoal', 'waypointLuckyCatModel');
+}
 
+function createScaledStandaloneModel(source, targetHeight, wrapperName, modelName) {
+    const wrapper = new THREE.Group();
+    wrapper.name = wrapperName;
     const model = source.clone(true);
-    model.name = 'waypointLuckyCatModel';
+    model.name = modelName;
     wrapper.add(model);
 
     model.updateMatrixWorld(true);
@@ -2085,7 +2165,7 @@ function createWaypointGoalCatInstance(source) {
         tripoGoalBox.getSize(tripoGoalSize);
         tripoGoalBox.getCenter(tripoGoalCenter);
         const sourceHeight = Math.max(tripoGoalSize.y, 0.001);
-        const sourceScale = WAYPOINT_GOAL_ASSET_HEIGHT / sourceHeight;
+        const sourceScale = targetHeight / sourceHeight;
         model.scale.setScalar(sourceScale);
         model.position.set(
             -tripoGoalCenter.x * sourceScale,
@@ -2095,6 +2175,28 @@ function createWaypointGoalCatInstance(source) {
     }
 
     return wrapper;
+}
+
+function createFreeWaypointMarker(index) {
+    const marker = new THREE.Group();
+    marker.name = `freeWaypointMarker_${index + 1}`;
+    marker.userData.kind = 'freeWaypoint';
+    marker.userData.waypointIndex = index;
+    marker.userData.collected = false;
+
+    loadFreeWaypointMarkerSource().then((source) => {
+        if (!source || !marker.parent || marker.userData.collected) return;
+        const markerModel = createScaledStandaloneModel(
+            source,
+            FREE_WAYPOINT_MARKER_HEIGHT,
+            'freeWaypointMarkerModelRoot',
+            'freeWaypointMarkerModel'
+        );
+        markerModel.position.y = FREE_WAYPOINT_MARKER_FLOOR_CLEARANCE;
+        marker.add(markerModel);
+    });
+
+    return marker;
 }
 
 function attachWaypointGoalCatToGoal(marker, loadingPlaceholder) {
@@ -2945,7 +3047,7 @@ function drawStar(ctx, cx, cy, spikes, outerRadius, innerRadius) {
     ctx.stroke();
 }
 
-function drawMinimapBackground(ctx, canvas, grid, start, goal, waypoints, highlightFloors, nextWaypoint, touchedHighlightFloors) {
+function drawMinimapBackground(ctx, canvas, grid, start, goal, waypoints, freeWaypoints, highlightFloors, nextWaypoint, touchedFreeWaypoints, touchedHighlightFloors) {
     canvas.width = 500; canvas.height = 500;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     const cellWidth = canvas.width / grid[0].length;
@@ -3000,6 +3102,29 @@ function drawMinimapBackground(ctx, canvas, grid, start, goal, waypoints, highli
                 ctx.fillText(index + 1, cx, cy);
                 ctx.shadowBlur = 0;
             }
+        });
+    }
+    if (freeWaypoints) {
+        freeWaypoints.forEach((wp, index) => {
+            const waypointKey = `${index}:${wp.x},${wp.z}`;
+            const isVisited = touchedFreeWaypoints.has(waypointKey);
+            const cx = (wp.x + 0.5) * cellWidth;
+            const cy = (wp.z + 0.5) * cellHeight;
+            const radius = Math.min(cellWidth, cellHeight) * 0.34;
+            ctx.save();
+            ctx.fillStyle = isVisited ? '#a7f3d0' : '#00c2ff';
+            ctx.strokeStyle = isVisited ? '#047857' : '#0f172a';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+            ctx.fillStyle = isVisited ? '#047857' : '#ffffff';
+            ctx.font = `bold ${cellHeight * 0.45}px sans-serif`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('★', cx, cy + cellHeight * 0.02);
+            ctx.restore();
         });
     }
 }
@@ -3071,8 +3196,10 @@ function ensureMinimapBackground(level) {
             level.start,
             level.goal,
             level.waypoints,
+            currentLevelState.isWaypointMode ? level.freeWaypoints : [],
             level.highlightFloors,
             currentLevelState.nextWaypoint,
+            currentLevelState.touchedFreeWaypoints,
             currentLevelState.touchedHighlightFloors
         );
         minimapBgDirty = false;
@@ -3086,7 +3213,7 @@ function updateMinimapPlayer() {
     const minimapContainer = document.getElementById('minimap-container');
     if (minimapContainer && getComputedStyle(minimapContainer).display === 'none') return;
 
-    const { grid, start, goal, waypoints, highlightFloors } = level;
+    const { grid, start, goal, waypoints, freeWaypoints, highlightFloors } = level;
 
     // Player data
     const gridPos = worldToGrid(player.position);
@@ -3111,6 +3238,7 @@ function updateMinimapPlayer() {
         player.rotation.y.toFixed(3),
         minimapOrientationMode,
         currentLevelState.nextWaypoint,
+        currentLevelState.touchedFreeWaypoints.size,
         currentLevelState.touchedHighlightFloors.size,
         minimap.width,
         minimap.height
@@ -3124,7 +3252,7 @@ function updateMinimapPlayer() {
             ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
             ctx.drawImage(minimapBgCanvas, 0, 0);
         } else {
-            drawMinimapBackground(ctx, minimap, grid, start, goal, waypoints, highlightFloors, currentLevelState.nextWaypoint, currentLevelState.touchedHighlightFloors);
+            drawMinimapBackground(ctx, minimap, grid, start, goal, waypoints, currentLevelState.isWaypointMode ? freeWaypoints : [], highlightFloors, currentLevelState.nextWaypoint, currentLevelState.touchedFreeWaypoints, currentLevelState.touchedHighlightFloors);
         }
         drawMinimapPlayerArrow(ctx, playerX, playerZ, headingAngle, cellWidth, cellHeight);
         lastMinimapRenderKey = renderKey;
@@ -3134,7 +3262,7 @@ function updateMinimapPlayer() {
     // 2) Heading-Up: rotate the whole minimap so the car heading is "up"
     if (!hasCachedBackground) {
         // Fallback
-        drawMinimapBackground(ctx, minimap, grid, start, goal, waypoints, highlightFloors, currentLevelState.nextWaypoint, currentLevelState.touchedHighlightFloors);
+        drawMinimapBackground(ctx, minimap, grid, start, goal, waypoints, currentLevelState.isWaypointMode ? freeWaypoints : [], highlightFloors, currentLevelState.nextWaypoint, currentLevelState.touchedFreeWaypoints, currentLevelState.touchedHighlightFloors);
         drawMinimapPlayerArrow(ctx, playerX, playerZ, headingAngle, cellWidth, cellHeight);
         lastMinimapRenderKey = renderKey;
         return;
@@ -3283,7 +3411,7 @@ function resetGame() {
 // ====================================================================
 
 let editorState = {
-    gridData: [], start: {}, goal: {}, waypoints: [], highlightFloors: [],
+    gridData: [], start: {}, goal: {}, waypoints: [], freeWaypoints: [], highlightFloors: [],
     isWaypointMode: false, currentTool: 'wall', isDrawing: false
 };
 let selectedCustomMapIndex = 0;
@@ -3356,6 +3484,9 @@ function initEditor(slotIndex = 0) {
         if (editorState.currentTool === 'waypoint' && editorState.waypoints.length > 0) {
             editorState.waypoints.pop();
             redrawEditorGrid();
+        } else if (editorState.currentTool === 'free-waypoint' && editorState.freeWaypoints.length > 0) {
+            editorState.freeWaypoints.pop();
+            redrawEditorGrid();
         }
     };
     const stopDrawing = () => { editorState.isDrawing = false; };
@@ -3395,7 +3526,7 @@ function initEditor(slotIndex = 0) {
 function loadEditorGrid(index, mode) {
     const levelToLoad = (mode === 'custom') ? customLevels[index] : levels[index];
     editorState = {
-        gridData: [], start: {}, goal: {}, waypoints: [], highlightFloors: [],
+        gridData: [], start: {}, goal: {}, waypoints: [], freeWaypoints: [], highlightFloors: [],
         isWaypointMode: false, currentTool: 'wall', isDrawing: false
     };
     document.querySelectorAll('#editor-tools button').forEach(b=>b.classList.remove('selected'));
@@ -3410,6 +3541,7 @@ function loadEditorGrid(index, mode) {
         sourceHeight = sourceGrid.length;
         editorState.isWaypointMode = levelToLoad.isWaypointMode || false;
         editorState.waypoints = levelToLoad.waypoints ? JSON.parse(JSON.stringify(levelToLoad.waypoints)) : [];
+        editorState.freeWaypoints = levelToLoad.freeWaypoints ? JSON.parse(JSON.stringify(levelToLoad.freeWaypoints)) : [];
         editorState.highlightFloors = levelToLoad.highlightFloors ? JSON.parse(JSON.stringify(levelToLoad.highlightFloors)) : [];
     } else {
         sourceWidth = sourceHeight = EDITOR_SIZE;
@@ -3462,6 +3594,13 @@ function redrawEditorGrid() {
                 marker.textContent = editorState.waypoints.indexOf(waypoint) + 1;
                 cell.appendChild(marker);
             }
+            const freeWaypoint = editorState.freeWaypoints.find(wp => wp.x === x && wp.z === z);
+            if (freeWaypoint) {
+                const marker = document.createElement('div');
+                marker.className = 'free-waypoint-marker';
+                marker.textContent = '★';
+                cell.appendChild(marker);
+            }
             grid.appendChild(cell);
         }
     }
@@ -3478,10 +3617,17 @@ function handleGridInteraction(e, force = false) {
     const isStart = editorState.start.x === x && editorState.start.z === z;
     const isGoal = editorState.goal.x === x && editorState.goal.z === z;
 
+    if ((editorState.currentTool === 'waypoint' || editorState.currentTool === 'free-waypoint') && (isStart || isGoal)) {
+        showEditorMessage(translations[currentLanguage].editor_waypoint_on_special);
+        return;
+    }
+    if (editorState.currentTool === 'highlight-floor' && (isStart || isGoal)) return;
+
     // Clear special status before applying new tool
     if (isStart) editorState.start = {};
     if (isGoal) editorState.goal = {};
     editorState.waypoints = editorState.waypoints.filter(wp => wp.x !== x || wp.z !== z);
+    editorState.freeWaypoints = editorState.freeWaypoints.filter(wp => wp.x !== x || wp.z !== z);
     editorState.highlightFloors = editorState.highlightFloors.filter(hf => hf.x !== x || hf.z !== z);
     
     // Clear old start/goal if placing a new one
@@ -3496,7 +3642,17 @@ function handleGridInteraction(e, force = false) {
         case 'waypoint':
             if (isStart || isGoal) { showEditorMessage(translations[currentLanguage].editor_waypoint_on_special); break; }
             editorState.gridData[z][x] = 0;
+            editorState.isWaypointMode = true;
+            document.getElementById('editor-waypoint-mode-toggle').checked = true;
             editorState.waypoints.push({x, z, color: document.getElementById('editor-waypoint-color').value });
+            editorState.isDrawing = false;
+            break;
+        case 'free-waypoint':
+            if (isStart || isGoal) { showEditorMessage(translations[currentLanguage].editor_waypoint_on_special); break; }
+            editorState.gridData[z][x] = 0;
+            editorState.isWaypointMode = true;
+            document.getElementById('editor-waypoint-mode-toggle').checked = true;
+            editorState.freeWaypoints.push({x, z});
             editorState.isDrawing = false;
             break;
         case 'highlight-floor':
@@ -3516,7 +3672,7 @@ function showEditorMessage(text, isError = true) {
 }
 
 function saveCustomMap() {
-    const { start, goal, gridData, waypoints, highlightFloors } = editorState;
+    const { start, goal, gridData, waypoints, freeWaypoints, highlightFloors } = editorState;
     if (!start.hasOwnProperty('x')) { showEditorMessage(translations[currentLanguage].editor_need_start); return; }
     if (!goal.hasOwnProperty('x')) { showEditorMessage(translations[currentLanguage].editor_need_goal); return; }
     
@@ -3536,6 +3692,7 @@ function saveCustomMap() {
         goal: { ...goal },
         isWaypointMode: document.getElementById('editor-waypoint-mode-toggle').checked,
         waypoints: waypoints,
+        freeWaypoints: freeWaypoints,
         highlightFloors: highlightFloors
     };
     if (newLevel.start.x === 0) newLevel.start.dir = 'E'; else if (newLevel.start.x === EDITOR_SIZE - 1) newLevel.start.dir = 'W';
