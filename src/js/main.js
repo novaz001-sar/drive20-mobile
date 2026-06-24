@@ -5,7 +5,6 @@ import { TextGeometry } from 'three/addons/geometries/TextGeometry.js';
 import { TILE_SIZE, WALL_HEIGHT, MOVE_SPEED, TURN_SPEED, LUCKY_CAT } from './constants.js';
 import { translations } from './i18n.js';
 import { levels } from './levels.js';
-import { createTechLuckyCatAsset } from './assets/techLuckyCat.js?v=20260621-cat-solid';
 import { createGrandTouringCarAsset } from './assets/grandTouringCar.js?v=20260623-minimal-tech';
 
 // ====================================================================
@@ -24,8 +23,6 @@ let minimapBgDirty = true;
 let lastMinimapRenderKey = '';
 let activeLampLights = [];
 let activeTechWallEffects = [];
-let techGoalHalo = null;
-let techGoalPulseParts = [];
 let minimapOrientationMode = 'NORTH_UP'; // 'NORTH_UP' | 'HEADING_UP'
 try {
     const savedMinimapMode = localStorage.getItem('minimap_orientation_mode_v1');
@@ -101,11 +98,11 @@ let currentEditorMode = 'custom';
 const DEFAULT_FLOOR_TEXTURE_URL = './src/assets/floor-cell-mobile-512.webp?v=20260620-4';
 const FALLBACK_FLOOR_TEXTURE_URL = './src/assets/floor-cell.png?v=20260620-4';
 const GOAL_MARKER_BASE_Y = WALL_HEIGHT / 2 - 1.5;
-const TRIPO_TECH_GOAL_HEIGHT = 4.1;
-const TRIPO_TECH_GOAL_FLOOR_CLEARANCE = 0.32;
-const WAYPOINT_MANEKI_NEKO_URL = './src/assets/models/optimized/waypoint-maneki-neko.glb?v=20260624-maneki-replace';
+const WAYPOINT_GOAL_ASSET_HEIGHT = 4.6;
+const WAYPOINT_GOAL_FLOOR_CLEARANCE = 0.26;
+const WAYPOINT_MANEKI_NEKO_URL = './src/assets/models/optimized/waypoint-maneki-neko.glb?v=20260624-futuristic-only';
 let defaultFloorTexturePromise = null;
-let tripoTechLuckyCatPromise = null;
+let waypointGoalCatPromise = null;
 const tripoGoalBox = new THREE.Box3();
 const tripoGoalSize = new THREE.Vector3();
 const tripoGoalCenter = new THREE.Vector3();
@@ -1083,8 +1080,6 @@ function showMainMenu() {
     });
     activeLampLights = [];
     activeTechWallEffects = [];
-    techGoalHalo = null;
-    techGoalPulseParts = [];
     clearGoalHeartBursts();
     clearLevelCelebrations();
     minimapBgDirty = true;
@@ -1141,8 +1136,6 @@ function loadLevel(levelData) {
     });
     activeLampLights = [];
     activeTechWallEffects = [];
-    techGoalHalo = null;
-    techGoalPulseParts = [];
     clearGoalHeartBursts();
     clearLevelCelebrations();
     minimapBgDirty = true;
@@ -1516,12 +1509,6 @@ function animate() {
             if (luckyCatWrist) luckyCatWrist.rotation.x = Math.sin(elapsedTime * LUCKY_CAT.WRIST_SPEED) * toRad(LUCKY_CAT.WRIST_AMPL_DEG);
         }
     }
-    if (techGoalHalo) techGoalHalo.rotation.z += delta * 0.9;
-    techGoalPulseParts.forEach(part => {
-        const pulse = (Math.sin(elapsedTime * part.speed + part.phase) + 1) / 2;
-        part.material.opacity = part.baseOpacity + pulse * part.pulseOpacity;
-        if (part.light) part.light.intensity = part.baseIntensity + pulse * part.pulseIntensity;
-    });
     if (floatingHeart) {
         const t = elapsedTime * 1.5;
         floatingHeart.position.y = floatingHeart.userData.baseY + Math.sin(t) * 0.18;
@@ -2050,14 +2037,14 @@ function createLuckyCat() {
     return catGroup;
 }
 
-function loadTripoTechLuckyCatSource() {
-    if (!tripoTechLuckyCatPromise) {
+function loadWaypointGoalCatSource() {
+    if (!waypointGoalCatPromise) {
         const loader = new GLTFLoader();
-        tripoTechLuckyCatPromise = loader.loadAsync(WAYPOINT_MANEKI_NEKO_URL).then((gltf) => {
+        waypointGoalCatPromise = loader.loadAsync(WAYPOINT_MANEKI_NEKO_URL).then((gltf) => {
             const source = gltf.scene || gltf.scenes?.[0];
-            if (!source) throw new Error('Tripo tech lucky cat GLB did not contain a scene.');
+            if (!source) throw new Error('Waypoint lucky cat GLB did not contain a scene.');
 
-            source.name = 'tripoTechLuckyCatSource';
+            source.name = 'waypointGoalLuckyCatSource';
             source.traverse((child) => {
                 if (!child.isMesh) return;
                 child.castShadow = false;
@@ -2067,104 +2054,29 @@ function loadTripoTechLuckyCatSource() {
             });
             return source;
         }).catch((error) => {
-            console.warn('Failed to load Tripo tech lucky cat goal model. Falling back to procedural cat.', error);
-            tripoTechLuckyCatPromise = null;
+            console.warn('Failed to load waypoint lucky cat goal model.', error);
+            waypointGoalCatPromise = null;
             return null;
         });
     }
-    return tripoTechLuckyCatPromise;
+    return waypointGoalCatPromise;
 }
 
 function prepareWaypointGoalCatMesh(mesh) {
     const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-    const hasTextureMaterial = materials.some((material) => Boolean(
-        material?.map ||
-        material?.normalMap ||
-        material?.metalnessMap ||
-        material?.roughnessMap ||
-        material?.metalnessRoughnessMap
-    ));
-
-    if (!hasTextureMaterial) {
-        applyTechLuckyCatVertexColors(mesh);
-        return;
-    }
 
     materials.filter(Boolean).forEach((material) => {
-        if ('metalness' in material) material.metalness = Math.max(material.metalness ?? 0.18, 0.22);
-        if ('roughness' in material) material.roughness = Math.min(Math.max(material.roughness ?? 0.34, 0.24), 0.58);
-        if ('emissive' in material) material.emissive = new THREE.Color(0x06182a);
-        if ('emissiveIntensity' in material) material.emissiveIntensity = 0.045;
         material.depthWrite = true;
         material.needsUpdate = true;
     });
 }
 
-function applyTechLuckyCatVertexColors(mesh) {
-    const geometry = mesh.geometry;
-    const position = geometry?.attributes?.position;
-    if (!geometry || !position) return;
-
-    if (!geometry.userData.tripoTechVertexColorsApplied) {
-        geometry.computeBoundingBox();
-        const box = geometry.boundingBox;
-        const height = Math.max(box.max.y - box.min.y, 0.001);
-        const width = Math.max(box.max.x - box.min.x, 0.001);
-        const depth = Math.max(box.max.z - box.min.z, 0.001);
-        const colors = new Float32Array(position.count * 3);
-        const color = new THREE.Color();
-        const sideAccent = new THREE.Color();
-        const frontHighlight = new THREE.Color(0xffffff);
-        const baseShadow = new THREE.Color(0x6b7280);
-
-        for (let i = 0; i < position.count; i++) {
-            const xNorm = (position.getX(i) - box.min.x) / width;
-            const yNorm = (position.getY(i) - box.min.y) / height;
-            const zNorm = (position.getZ(i) - box.min.z) / depth;
-
-            if (yNorm < 0.16) {
-                color.set(0x9be7ff);
-            } else if (yNorm < 0.34) {
-                color.set(0xffb5d1);
-            } else if (yNorm < 0.70) {
-                color.set(0xf7f8ff);
-            } else {
-                color.set(0xc9f4ff);
-            }
-
-            sideAccent.set(xNorm < 0.5 ? 0x77f7ff : 0xff78c8);
-            color.lerp(sideAccent, 0.10 + Math.abs(xNorm - 0.5) * 0.26);
-            if (zNorm > 0.62) color.lerp(frontHighlight, 0.10);
-            if (yNorm < 0.08) color.lerp(baseShadow, 0.18);
-
-            colors[i * 3] = color.r;
-            colors[i * 3 + 1] = color.g;
-            colors[i * 3 + 2] = color.b;
-        }
-
-        geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-        geometry.userData.tripoTechVertexColorsApplied = true;
-    }
-
-    mesh.material = new THREE.MeshPhysicalMaterial({
-        color: 0xffffff,
-        vertexColors: true,
-        metalness: 0.34,
-        roughness: 0.27,
-        clearcoat: 0.9,
-        clearcoatRoughness: 0.14,
-        emissive: 0x06182a,
-        emissiveIntensity: 0.12,
-        side: THREE.FrontSide
-    });
-}
-
-function createTripoTechLuckyCatInstance(source) {
+function createWaypointGoalCatInstance(source) {
     const wrapper = new THREE.Group();
-    wrapper.name = 'tripoWaypointTechLuckyCatGoal';
+    wrapper.name = 'waypointLuckyCatGoal';
 
     const model = source.clone(true);
-    model.name = 'tripoWaypointTechLuckyCatModel';
+    model.name = 'waypointLuckyCatModel';
     wrapper.add(model);
 
     model.updateMatrixWorld(true);
@@ -2173,7 +2085,7 @@ function createTripoTechLuckyCatInstance(source) {
         tripoGoalBox.getSize(tripoGoalSize);
         tripoGoalBox.getCenter(tripoGoalCenter);
         const sourceHeight = Math.max(tripoGoalSize.y, 0.001);
-        const sourceScale = TRIPO_TECH_GOAL_HEIGHT / sourceHeight;
+        const sourceScale = WAYPOINT_GOAL_ASSET_HEIGHT / sourceHeight;
         model.scale.setScalar(sourceScale);
         model.position.set(
             -tripoGoalCenter.x * sourceScale,
@@ -2182,99 +2094,27 @@ function createTripoTechLuckyCatInstance(source) {
         );
     }
 
-    const orbitMaterial = new THREE.MeshBasicMaterial({
-        color: 0x67e8f9,
-        transparent: true,
-        opacity: 0.54,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
-        side: THREE.DoubleSide
-    });
-    const orbit = new THREE.Mesh(new THREE.TorusGeometry(1.72, 0.026, 8, 72), orbitMaterial);
-    orbit.name = 'tripoTechGoalHalo';
-    orbit.position.y = 1.72;
-    orbit.rotation.x = Math.PI / 2;
-    wrapper.add(orbit);
-
-    const visorMaterial = new THREE.MeshBasicMaterial({
-        color: 0x071426,
-        transparent: true,
-        opacity: 0.72,
-        depthWrite: false
-    });
-    const visorGlowMaterial = new THREE.MeshBasicMaterial({
-        color: 0xff5ec4,
-        transparent: true,
-        opacity: 0.72,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false
-    });
-    const visor = new THREE.Mesh(new THREE.BoxGeometry(1.26, 0.18, 0.055), visorMaterial);
-    visor.name = 'tripoTechGoalVisor';
-    visor.position.set(0, 3.05, 2.08);
-    wrapper.add(visor);
-    const visorGlow = new THREE.Mesh(new THREE.BoxGeometry(1.42, 0.035, 0.065), visorGlowMaterial);
-    visorGlow.name = 'tripoTechGoalVisorGlow';
-    visorGlow.position.set(0, 3.05, 2.12);
-    wrapper.add(visorGlow);
-
-    const badgeMaterial = new THREE.MeshBasicMaterial({
-        color: 0x8df7ff,
-        transparent: true,
-        opacity: 0.66,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
-        side: THREE.DoubleSide
-    });
-    const badge = new THREE.Mesh(new THREE.TorusGeometry(0.28, 0.018, 8, 36), badgeMaterial);
-    badge.name = 'tripoTechGoalChestBadge';
-    badge.position.set(0, 2.02, 2.08);
-    wrapper.add(badge);
-
-    const baseGlow = new THREE.Mesh(new THREE.TorusGeometry(1.52, 0.035, 8, 72), badgeMaterial);
-    baseGlow.name = 'tripoTechGoalBaseGlow';
-    baseGlow.position.y = 0.08;
-    baseGlow.rotation.x = Math.PI / 2;
-    wrapper.add(baseGlow);
-
-    const accentLight = new THREE.PointLight(0xff8ac8, 1.45, 18, 1.45);
-    accentLight.position.set(0, 2.0, 1.65);
-    wrapper.add(accentLight);
-
-    wrapper.userData.halo = orbit;
-    wrapper.userData.pulseParts = [
-        { material: orbitMaterial, baseOpacity: 0.40, pulseOpacity: 0.30, phase: 0.4, speed: 3.8, light: accentLight, baseIntensity: 0.82, pulseIntensity: 0.92 },
-        { material: visorGlowMaterial, baseOpacity: 0.48, pulseOpacity: 0.30, phase: 1.2, speed: 4.6 },
-        { material: badgeMaterial, baseOpacity: 0.44, pulseOpacity: 0.26, phase: 2.0, speed: 4.0 }
-    ];
     return wrapper;
 }
 
-function attachTripoTechLuckyCatToGoal(marker, fallbackCat) {
-    const requestId = Symbol('tripo-tech-goal');
+function attachWaypointGoalCatToGoal(marker, loadingPlaceholder) {
+    const requestId = Symbol('waypoint-goal-cat');
     marker.userData.tripoGoalRequestId = requestId;
     marker.userData.tripoGoalLoading = true;
 
-    loadTripoTechLuckyCatSource().then((source) => {
+    loadWaypointGoalCatSource().then((source) => {
         if (!source || goalMarker !== marker || marker.userData.tripoGoalRequestId !== requestId) {
             return;
         }
 
-        const tripoCat = createTripoTechLuckyCatInstance(source);
-        const tripoScale = fallbackCat?.scale?.x || 1.5;
-        tripoCat.scale.setScalar(tripoScale);
-        tripoCat.position.y = TRIPO_TECH_GOAL_FLOOR_CLEARANCE - GOAL_MARKER_BASE_Y;
+        const waypointCat = createWaypointGoalCatInstance(source);
+        waypointCat.position.y = WAYPOINT_GOAL_FLOOR_CLEARANCE - GOAL_MARKER_BASE_Y;
 
-        if (fallbackCat?.parent === marker) marker.remove(fallbackCat);
-        marker.add(tripoCat);
+        if (loadingPlaceholder?.parent === marker) marker.remove(loadingPlaceholder);
+        marker.add(waypointCat);
 
         luckyCatArm = null;
         luckyCatWrist = null;
-        techGoalHalo = tripoCat.userData.halo || null;
-        techGoalPulseParts = techGoalPulseParts.filter((part) => part.source !== 'proceduralTechCat');
-        if (Array.isArray(tripoCat.userData.pulseParts)) {
-            techGoalPulseParts.push(...tripoCat.userData.pulseParts);
-        }
         marker.userData.tripoGoalLoading = false;
         marker.userData.tripoGoalLoaded = true;
     });
@@ -2284,50 +2124,36 @@ function createGoalMarker(goalCoords) {
     const level = (currentLevelIndex === -1) ? customLevels[selectedCustomMapIndex] : levels[currentLevelIndex];
     const goalPos = gridToWorld(goalCoords.x, goalCoords.z, level.grid);
     const isTechGoal = currentLevelState.isWaypointMode;
-    techGoalHalo = null;
-    techGoalPulseParts = [];
+    luckyCatArm = null;
+    luckyCatWrist = null;
+    floatingHeart = null;
     goalMarker = new THREE.Group();
     goalMarker.userData.techGoal = isTechGoal;
     let cat;
     if (isTechGoal) {
-        const techCat = createTechLuckyCatAsset();
-        cat = techCat.group;
-        luckyCatArm = techCat.arm;
-        luckyCatWrist = techCat.wrist;
-        techGoalHalo = techCat.halo;
-        techGoalPulseParts.push(...techCat.pulseParts.map((part) => ({ ...part, source: 'proceduralTechCat' })));
+        cat = new THREE.Group();
+        cat.name = 'waypointGoalLoadingPlaceholder';
+        goalMarker.add(cat);
+        attachWaypointGoalCatToGoal(goalMarker, cat);
     } else {
         cat = createLuckyCat();
-    }
-    cat.scale.set(1.5, 1.5, 1.5); goalMarker.add(cat);
-    if (isTechGoal) attachTripoTechLuckyCatToGoal(goalMarker, cat);
-    const heartShape = new THREE.Shape();
-    const [x,y,s] = [0,0,0.6];
-    heartShape.moveTo(x+0.5*s,y+0.5*s).bezierCurveTo(x+0.5*s,y+0.5*s,x+0.4*s,y,x,y).bezierCurveTo(x-0.6*s,y,x-0.6*s,y+0.7*s,x-0.6*s,y+0.7*s).bezierCurveTo(x-0.6*s,y+1.1*s,x-0.3*s,y+1.54*s,x+0.5*s,y+1.9*s).bezierCurveTo(x+1.2*s,y+1.54*s,x+1.6*s,y+1.1*s,x+1.6*s,y+0.7*s).bezierCurveTo(x+1.6*s,y+0.7*s,x+1.6*s,y,x+1.0*s,y).bezierCurveTo(x+0.7*s,y,x+0.5*s,y+0.5*s,x+0.5*s,y+0.5*s);
-    const heartGeo = new THREE.ExtrudeGeometry(heartShape, { depth: 0.25, bevelEnabled: true, bevelSegments: 2, steps: 1, bevelSize: 0.08, bevelThickness: 0.08 });
-    const heartMat = new THREE.MeshBasicMaterial({
-        color: isTechGoal ? 0x67e8f9 : 0xff4d6d,
-        transparent: isTechGoal,
-        opacity: isTechGoal ? 0.88 : 1,
-        depthTest: true,
-        depthWrite: true
-    });
-    const heart = new THREE.Mesh(heartGeo, heartMat);
-    heart.position.set(0, 6.2, 0.2); heart.rotation.x = Math.PI; heart.scale.set(0.9, 0.9, 0.9);
-    goalMarker.add(heart);
-    floatingHeart = heart;
-    floatingHeart.userData.baseY = heart.position.y;
-    if (isTechGoal) {
-        const baseRing = new THREE.Mesh(new THREE.TorusGeometry(2.0, 0.04, 8, 52), new THREE.MeshBasicMaterial({
-            color: 0x67e8f9,
-            transparent: true,
-            opacity: 0.5,
-            depthWrite: false
-        }));
-        baseRing.position.y = -0.05;
-        baseRing.rotation.x = Math.PI / 2;
-        goalMarker.add(baseRing);
-        techGoalPulseParts.push({ material: heartMat, baseOpacity: 0.68, pulseOpacity: 0.28, phase: 2.1, speed: 4.1 });
+        cat.scale.set(1.5, 1.5, 1.5);
+        goalMarker.add(cat);
+
+        const heartShape = new THREE.Shape();
+        const [x,y,s] = [0,0,0.6];
+        heartShape.moveTo(x+0.5*s,y+0.5*s).bezierCurveTo(x+0.5*s,y+0.5*s,x+0.4*s,y,x,y).bezierCurveTo(x-0.6*s,y,x-0.6*s,y+0.7*s,x-0.6*s,y+0.7*s).bezierCurveTo(x-0.6*s,y+1.1*s,x-0.3*s,y+1.54*s,x+0.5*s,y+1.9*s).bezierCurveTo(x+1.2*s,y+1.54*s,x+1.6*s,y+1.1*s,x+1.6*s,y+0.7*s).bezierCurveTo(x+1.6*s,y+0.7*s,x+1.6*s,y,x+1.0*s,y).bezierCurveTo(x+0.7*s,y,x+0.5*s,y+0.5*s,x+0.5*s,y+0.5*s);
+        const heartGeo = new THREE.ExtrudeGeometry(heartShape, { depth: 0.25, bevelEnabled: true, bevelSegments: 2, steps: 1, bevelSize: 0.08, bevelThickness: 0.08 });
+        const heartMat = new THREE.MeshBasicMaterial({
+            color: 0xff4d6d,
+            depthTest: true,
+            depthWrite: true
+        });
+        const heart = new THREE.Mesh(heartGeo, heartMat);
+        heart.position.set(0, 6.2, 0.2); heart.rotation.x = Math.PI; heart.scale.set(0.9, 0.9, 0.9);
+        goalMarker.add(heart);
+        floatingHeart = heart;
+        floatingHeart.userData.baseY = heart.position.y;
     }
     goalMarker.position.copy(goalPos);
     goalMarker.position.y = GOAL_MARKER_BASE_Y;
