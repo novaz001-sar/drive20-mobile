@@ -5,7 +5,6 @@ import { TextGeometry } from 'three/addons/geometries/TextGeometry.js';
 import { TILE_SIZE, WALL_HEIGHT, MOVE_SPEED, TURN_SPEED, LUCKY_CAT } from './constants.js';
 import { translations } from './i18n.js';
 import { levels } from './levels.js';
-import { createGrandTouringCarAsset } from './assets/grandTouringCar.js?v=20260623-minimal-tech';
 
 // ====================================================================
 // 全局变量和状态机 (Global Variables & State Machine)
@@ -103,14 +102,20 @@ const WAYPOINT_GOAL_ASSET_HEIGHT = 4.6;
 const WAYPOINT_GOAL_FLOOR_CLEARANCE = 0.26;
 const WAYPOINT_GOAL_MODEL_URL = './src/assets/models/optimized/waypoint-goal-purple-creature.glb?v=20260624-purple-creature-goal';
 const FREE_WAYPOINT_MARKER_URL = './src/assets/models/optimized/free-waypoint-marker.glb?v=20260624-free-waypoint';
+const PLAYER_VEHICLE_MODEL_URL = './src/assets/models/optimized/player-pickup-truck.glb?v=20260624-pickup-truck';
 const FREE_WAYPOINT_MARKER_HEIGHT = 2.35;
 const FREE_WAYPOINT_MARKER_FLOOR_CLEARANCE = 0.16;
+const PLAYER_VEHICLE_TARGET_LENGTH = TILE_SIZE * 0.78;
 let defaultFloorTexturePromise = null;
 let waypointGoalModelPromise = null;
 let freeWaypointMarkerPromise = null;
+let playerVehicleModelPromise = null;
 const tripoGoalBox = new THREE.Box3();
 const tripoGoalSize = new THREE.Vector3();
 const tripoGoalCenter = new THREE.Vector3();
+const playerVehicleBox = new THREE.Box3();
+const playerVehicleSize = new THREE.Vector3();
+const playerVehicleCenter = new THREE.Vector3();
 const AUDIO_MASTER_GAIN_MULTIPLIER = 2;
 const SOUND_ENABLED_STORAGE_KEY = 'drive_sound_enabled_v1';
 const SOUND_VOLUME_STORAGE_KEY = 'drive_sound_volume_v2';
@@ -279,7 +284,7 @@ async function init() {
     scene.add(player);
     
     // Initialize Player Car Model for 3P view (v10.0)
-    playerCarModel = createGrandTouringCarAsset({ tileSize: TILE_SIZE });
+    playerCarModel = createPlayerPickupTruckAsset();
     player.add(playerCarModel);
     
     // Camera setup (Parented to player) (v10.0)
@@ -2146,6 +2151,63 @@ function prepareStandaloneAssetMesh(mesh) {
         material.depthWrite = true;
         material.needsUpdate = true;
     });
+}
+
+function loadPlayerVehicleSource() {
+    if (!playerVehicleModelPromise) {
+        const loader = new GLTFLoader();
+        playerVehicleModelPromise = loader.loadAsync(PLAYER_VEHICLE_MODEL_URL).then((gltf) => {
+            const source = gltf.scene || gltf.scenes?.[0];
+            if (!source) throw new Error('Player vehicle GLB did not contain a scene.');
+
+            source.name = 'playerPickupTruckSource';
+            source.traverse((child) => {
+                if (!child.isMesh) return;
+                child.castShadow = false;
+                child.receiveShadow = false;
+                child.frustumCulled = true;
+                prepareStandaloneAssetMesh(child);
+            });
+            return source;
+        }).catch((error) => {
+            console.warn('Failed to load player pickup truck model.', error);
+            playerVehicleModelPromise = null;
+            return null;
+        });
+    }
+    return playerVehicleModelPromise;
+}
+
+function createPlayerPickupTruckAsset() {
+    const wrapper = new THREE.Group();
+    wrapper.name = 'playerPickupTruckAsset';
+
+    loadPlayerVehicleSource().then((source) => {
+        if (!source || !wrapper.parent) return;
+        const model = source.clone(true);
+        model.name = 'playerPickupTruckModel';
+        wrapper.add(model);
+
+        model.updateMatrixWorld(true);
+        playerVehicleBox.setFromObject(model);
+        if (!playerVehicleBox.isEmpty()) {
+            playerVehicleBox.getSize(playerVehicleSize);
+            playerVehicleBox.getCenter(playerVehicleCenter);
+            const sourceLength = Math.max(playerVehicleSize.z, playerVehicleSize.x, 0.001);
+            const sourceScale = PLAYER_VEHICLE_TARGET_LENGTH / sourceLength;
+            model.scale.setScalar(sourceScale);
+            model.position.set(
+                -playerVehicleCenter.x * sourceScale,
+                -playerVehicleBox.min.y * sourceScale,
+                -playerVehicleCenter.z * sourceScale
+            );
+        }
+
+        wrapper.visible = viewMode === '3P';
+        wrapper.scale.setScalar(thirdPersonControls.carScale);
+    });
+
+    return wrapper;
 }
 
 function createWaypointGoalModelInstance(source) {
