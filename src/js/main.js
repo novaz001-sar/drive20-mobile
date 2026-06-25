@@ -45,7 +45,7 @@ let thirdPersonControls = {
     angle: 45, // Corresponds to slider initial value
     carScale: 1.0, // NEW: Add car scale control
     cameraMode: 'follow',
-    viewDirectionExpanded: true
+    panelExpanded: true
 };
 
 let currentLevelState = {
@@ -825,14 +825,14 @@ function setupUI() {
     const angleSlider = document.getElementById('angle-slider');
     const carSizeSlider = document.getElementById('car-size-slider'); // NEW
     const cameraModeButtons = document.querySelectorAll('#third-person-camera-mode-toggle [data-camera-mode]');
-    const viewDirectionControl = document.querySelector('.view-direction-control');
-    const viewDirectionPanel = document.getElementById('view-direction-panel');
-    const viewDirectionVisibilityBtn = document.getElementById('view-direction-visibility-btn');
-    const syncViewDirectionVisibilityUI = () => {
-        const isExpanded = thirdPersonControls.viewDirectionExpanded;
-        if (viewDirectionControl) viewDirectionControl.classList.toggle('collapsed', !isExpanded);
-        if (viewDirectionPanel) viewDirectionPanel.hidden = !isExpanded;
-        if (viewDirectionVisibilityBtn) viewDirectionVisibilityBtn.setAttribute('aria-expanded', String(isExpanded));
+    const thirdPersonControlsEl = document.getElementById('third-person-controls');
+    const thirdPersonSettingsPanel = document.getElementById('third-person-settings-panel');
+    const thirdPersonPanelToggleBtn = document.getElementById('third-person-panel-toggle-btn');
+    const syncThirdPersonPanelVisibilityUI = () => {
+        const isExpanded = thirdPersonControls.panelExpanded;
+        if (thirdPersonControlsEl) thirdPersonControlsEl.classList.toggle('collapsed', !isExpanded);
+        if (thirdPersonSettingsPanel) thirdPersonSettingsPanel.hidden = !isExpanded;
+        if (thirdPersonPanelToggleBtn) thirdPersonPanelToggleBtn.setAttribute('aria-expanded', String(isExpanded));
     };
     const syncThirdPersonCameraModeUI = () => {
         cameraModeButtons.forEach(modeButton => {
@@ -862,12 +862,12 @@ function setupUI() {
             updateThirdPersonCamera();
         });
     });
-    viewDirectionVisibilityBtn?.addEventListener('click', () => {
-        thirdPersonControls.viewDirectionExpanded = !thirdPersonControls.viewDirectionExpanded;
-        syncViewDirectionVisibilityUI();
+    thirdPersonPanelToggleBtn?.addEventListener('click', () => {
+        thirdPersonControls.panelExpanded = !thirdPersonControls.panelExpanded;
+        syncThirdPersonPanelVisibilityUI();
     });
     syncThirdPersonCameraModeUI();
-    syncViewDirectionVisibilityUI();
+    syncThirdPersonPanelVisibilityUI();
 
     const setupMenuInfo = (buttonId, infoBoxId, descriptionKey) => {
         const button = document.getElementById(buttonId);

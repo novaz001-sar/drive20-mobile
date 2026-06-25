@@ -958,7 +958,7 @@ body.level-celebration-flash::after {
     color: var(--primary-color);
     font-size: 16px;
 }
-.view-direction-visibility-btn {
+.third-person-panel-toggle-btn {
     align-items: center;
     background: rgba(15, 118, 110, 0.12);
     border: 1px solid rgba(15, 118, 110, 0.28);
@@ -973,18 +973,21 @@ body.level-celebration-flash::after {
     padding: 0 10px;
     width: 150px;
 }
-.view-direction-visibility-btn::after {
+.third-person-panel-toggle-btn::after {
     content: "-";
     font-size: 20px;
     line-height: 1;
 }
-.view-direction-control.collapsed .view-direction-visibility-btn::after {
+#third-person-controls.collapsed .third-person-panel-toggle-btn::after {
     content: "+";
 }
-.view-direction-panel {
-    display: block;
+.third-person-settings-panel {
+    align-items: center;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
 }
-.view-direction-control.collapsed .view-direction-panel {
+.third-person-settings-panel[hidden] {
     display: none;
 }
 .control-group input[type="range"] {
@@ -1216,6 +1219,10 @@ body.level-celebration-flash::after {
         bottom: calc(96px + env(safe-area-inset-bottom));
         left: 50%;
         transform: translateX(-50%);
+    }
+
+    .third-person-settings-panel {
+        flex-direction: row;
     }
 }
 

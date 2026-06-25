@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#0f766e">
     <title>Happy Drive Mobile</title>
     <link rel="preload" as="image" href="./src/assets/floor-cell-mobile-512.webp?v=20260620-4" type="image/webp" fetchpriority="high">
-    <link rel="stylesheet" href="./src/styles/main.css?v=20260625-view-direction-toggle">
+    <link rel="stylesheet" href="./src/styles/main.css?v=20260625-third-person-panel-toggle">
 </head>
 <body>
     <div id="game-container"></div>
@@ -19,27 +19,28 @@
         
         <!-- NEW: Third person camera controls -->
         <div id="third-person-controls">
-            <div class="control-group view-direction-control">
-                <button type="button" id="view-direction-visibility-btn" class="view-direction-visibility-btn" aria-expanded="true" aria-controls="view-direction-panel" data-lang-zh="视角方向" data-lang-en="View Direction">视角方向</button>
-                <div id="view-direction-panel" class="view-direction-panel">
+            <button type="button" id="third-person-panel-toggle-btn" class="third-person-panel-toggle-btn" aria-expanded="true" aria-controls="third-person-settings-panel" data-lang-zh="第三人称参数" data-lang-en="3P Controls">第三人称参数</button>
+            <div id="third-person-settings-panel" class="third-person-settings-panel">
+                <div class="control-group view-direction-control">
+                    <label data-lang-zh="视角方向" data-lang-en="View Direction">视角方向</label>
                     <div id="third-person-camera-mode-toggle" class="segmented-control" role="group" aria-label="Third person camera direction">
                         <button type="button" class="camera-mode-btn active" data-camera-mode="follow" data-lang-zh="跟随" data-lang-en="Follow">跟随</button>
                         <button type="button" class="camera-mode-btn" data-camera-mode="overhead" data-lang-zh="俯瞰" data-lang-en="Overhead">俯瞰</button>
                     </div>
                 </div>
-            </div>
-            <div class="control-group">
-                <label for="zoom-slider" data-lang-zh="远近" data-lang-en="Zoom">远近</label>
-                <input type="range" id="zoom-slider" min="1.5" max="5" step="0.1" value="2.5">
-            </div>
-            <div class="control-group">
-                <label for="angle-slider" data-lang-zh="角度" data-lang-en="Angle">角度</label>
-                <input type="range" id="angle-slider" min="25" max="85" step="1" value="45">
-            </div>
-            <!-- NEW: Car size control -->
-            <div class="control-group">
-                <label for="car-size-slider" data-lang-zh="大小" data-lang-en="Size">大小</label>
-                <input type="range" id="car-size-slider" min="0.5" max="1.6" step="0.05" value="1.0">
+                <div class="control-group">
+                    <label for="zoom-slider" data-lang-zh="远近" data-lang-en="Zoom">远近</label>
+                    <input type="range" id="zoom-slider" min="1.5" max="5" step="0.1" value="2.5">
+                </div>
+                <div class="control-group">
+                    <label for="angle-slider" data-lang-zh="角度" data-lang-en="Angle">角度</label>
+                    <input type="range" id="angle-slider" min="25" max="85" step="1" value="45">
+                </div>
+                <!-- NEW: Car size control -->
+                <div class="control-group">
+                    <label for="car-size-slider" data-lang-zh="大小" data-lang-en="Size">大小</label>
+                    <input type="range" id="car-size-slider" min="0.5" max="1.6" step="0.05" value="1.0">
+                </div>
             </div>
         </div>
 
@@ -383,6 +384,6 @@
             }
         }
     </script>
-    <script type="module" src="./src/js/main.js?v=20260625-view-direction-toggle"></script>
+    <script type="module" src="./src/js/main.js?v=20260625-third-person-panel-toggle"></script>
 </body>
 </html>
