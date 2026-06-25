@@ -958,6 +958,35 @@ body.level-celebration-flash::after {
     color: var(--primary-color);
     font-size: 16px;
 }
+.view-direction-visibility-btn {
+    align-items: center;
+    background: rgba(15, 118, 110, 0.12);
+    border: 1px solid rgba(15, 118, 110, 0.28);
+    border-radius: 8px;
+    color: var(--primary-color);
+    cursor: pointer;
+    display: flex;
+    font-size: 16px;
+    font-weight: 800;
+    justify-content: space-between;
+    min-height: 36px;
+    padding: 0 10px;
+    width: 150px;
+}
+.view-direction-visibility-btn::after {
+    content: "-";
+    font-size: 20px;
+    line-height: 1;
+}
+.view-direction-control.collapsed .view-direction-visibility-btn::after {
+    content: "+";
+}
+.view-direction-panel {
+    display: block;
+}
+.view-direction-control.collapsed .view-direction-panel {
+    display: none;
+}
 .control-group input[type="range"] {
     width: 150px;
     cursor: pointer;

@@ -44,7 +44,8 @@ let thirdPersonControls = {
     zoom: 2.5, // Corresponds to slider initial value
     angle: 45, // Corresponds to slider initial value
     carScale: 1.0, // NEW: Add car scale control
-    cameraMode: 'follow'
+    cameraMode: 'follow',
+    viewDirectionExpanded: true
 };
 
 let currentLevelState = {
@@ -824,6 +825,15 @@ function setupUI() {
     const angleSlider = document.getElementById('angle-slider');
     const carSizeSlider = document.getElementById('car-size-slider'); // NEW
     const cameraModeButtons = document.querySelectorAll('#third-person-camera-mode-toggle [data-camera-mode]');
+    const viewDirectionControl = document.querySelector('.view-direction-control');
+    const viewDirectionPanel = document.getElementById('view-direction-panel');
+    const viewDirectionVisibilityBtn = document.getElementById('view-direction-visibility-btn');
+    const syncViewDirectionVisibilityUI = () => {
+        const isExpanded = thirdPersonControls.viewDirectionExpanded;
+        if (viewDirectionControl) viewDirectionControl.classList.toggle('collapsed', !isExpanded);
+        if (viewDirectionPanel) viewDirectionPanel.hidden = !isExpanded;
+        if (viewDirectionVisibilityBtn) viewDirectionVisibilityBtn.setAttribute('aria-expanded', String(isExpanded));
+    };
     const syncThirdPersonCameraModeUI = () => {
         cameraModeButtons.forEach(modeButton => {
             modeButton.classList.toggle('active', modeButton.dataset.cameraMode === thirdPersonControls.cameraMode);
@@ -852,7 +862,12 @@ function setupUI() {
             updateThirdPersonCamera();
         });
     });
+    viewDirectionVisibilityBtn?.addEventListener('click', () => {
+        thirdPersonControls.viewDirectionExpanded = !thirdPersonControls.viewDirectionExpanded;
+        syncViewDirectionVisibilityUI();
+    });
     syncThirdPersonCameraModeUI();
+    syncViewDirectionVisibilityUI();
 
     const setupMenuInfo = (buttonId, infoBoxId, descriptionKey) => {
         const button = document.getElementById(buttonId);
