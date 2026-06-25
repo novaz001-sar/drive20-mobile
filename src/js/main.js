@@ -104,7 +104,7 @@ const WAYPOINT_GOAL_ASSET_HEIGHT = 4.6;
 const WAYPOINT_GOAL_FLOOR_CLEARANCE = 0.26;
 const WAYPOINT_GOAL_MODEL_URL = './src/assets/models/optimized/waypoint-goal-purple-creature.glb?v=20260624-purple-creature-goal';
 const FREE_WAYPOINT_MARKER_URL = './src/assets/models/optimized/free-waypoint-marker.glb?v=20260624-free-waypoint';
-const ORANGE_DRAGON_GOAL_MODEL_URL = './src/assets/models/optimized/goal-orange-dragon.glb?v=20260625-orange-dragon-goal';
+const ORANGE_DRAGON_GOAL_MODEL_URL = './src/assets/models/optimized/goal-orange-dragon.glb?v=20260625-model-fix';
 const FREE_WAYPOINT_MARKER_HEIGHT = 2.35;
 const FREE_WAYPOINT_MARKER_FLOOR_CLEARANCE = 0.16;
 const PLAYER_VEHICLE_TARGET_LENGTH = TILE_SIZE * 0.78;
@@ -115,7 +115,7 @@ const PLAYER_VEHICLE_STORAGE_KEY = 'drive_player_vehicle_v1';
 const PLAYER_VEHICLE_ASSETS = Object.freeze({
     'dragon-cart': {
         id: 'dragon-cart',
-        url: './src/assets/models/optimized/player-dragon-cart.glb?v=20260625-dragon-cart',
+        url: './src/assets/models/optimized/player-dragon-cart.glb?v=20260625-model-fix',
         sourceName: 'playerDragonCartSource',
         wrapperName: 'playerDragonCartAsset',
         modelName: 'playerDragonCartModel',
@@ -127,28 +127,26 @@ const PLAYER_VEHICLE_ASSETS = Object.freeze({
     },
     'vintage-classic': {
         id: 'vintage-classic',
-        url: './src/assets/models/optimized/player-vintage-classic-car.glb?v=20260625-vintage-classic-car',
+        url: './src/assets/models/optimized/player-vintage-classic-car.glb?v=20260625-model-fix',
         sourceName: 'playerVintageClassicCarSource',
         wrapperName: 'playerVintageClassicCarAsset',
         modelName: 'playerVintageClassicCarModel',
-        yawOffset: 0,
+        yawOffset: Math.PI / 2,
         primaryColor: 0xc3473d,
         accentColor: 0xe7edf3,
         targetLength: PLAYER_VEHICLE_TARGET_LENGTH,
-        targetHeight: WALL_HEIGHT * 0.95,
         floorClearance: 0.12
     },
     'vintage-car': {
         id: 'vintage-car',
-        url: './src/assets/models/optimized/player-vintage-car.glb?v=20260625-vintage-car',
+        url: './src/assets/models/optimized/player-vintage-car.glb?v=20260625-model-fix',
         sourceName: 'playerVintageCarSource',
         wrapperName: 'playerVintageCarAsset',
         modelName: 'playerVintageCarModel',
-        yawOffset: 0,
+        yawOffset: Math.PI / 2,
         primaryColor: 0x4977a8,
         accentColor: 0xf4d06f,
         targetLength: PLAYER_VEHICLE_TARGET_LENGTH,
-        targetHeight: WALL_HEIGHT * 0.95,
         floorClearance: 0.12
     }
 });
@@ -2344,8 +2342,19 @@ function prepareStandaloneAssetMesh(mesh) {
 
 function preparePlayerVehicleMesh(mesh) {
     mesh.frustumCulled = false;
-    mesh.renderOrder = 30;
+    mesh.renderOrder = 0;
     prepareStandaloneAssetMesh(mesh);
+    const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    materials.filter(Boolean).forEach((material) => {
+        material.depthTest = true;
+        material.depthWrite = true;
+        material.needsUpdate = true;
+    });
+}
+
+function preparePlayerVehiclePlaceholderMesh(mesh) {
+    preparePlayerVehicleMesh(mesh);
+    mesh.renderOrder = 30;
     const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
     materials.filter(Boolean).forEach((material) => {
         material.depthTest = false;
@@ -2435,7 +2444,7 @@ function createPlayerVehiclePlaceholder(config) {
     });
 
     group.traverse((child) => {
-        if (child.isMesh) preparePlayerVehicleMesh(child);
+        if (child.isMesh) preparePlayerVehiclePlaceholderMesh(child);
     });
 
     return group;
@@ -2463,16 +2472,12 @@ function createPlayerVehicleAsset(vehicleId = selectedPlayerVehicleId) {
             playerVehicleBox.getSize(playerVehicleSize);
             playerVehicleBox.getCenter(playerVehicleCenter);
             const sourceLength = Math.max(playerVehicleSize.z, playerVehicleSize.x, 0.001);
-            const sourceHeight = Math.max(playerVehicleSize.y, 0.001);
-            const horizontalScale = config.targetLength / sourceLength;
-            const verticalScale = config.targetHeight
-                ? Math.max(horizontalScale, config.targetHeight / sourceHeight)
-                : horizontalScale;
-            model.scale.set(horizontalScale, verticalScale, horizontalScale);
+            const sourceScale = config.targetLength / sourceLength;
+            model.scale.setScalar(sourceScale);
             model.position.set(
-                -playerVehicleCenter.x * horizontalScale,
-                -playerVehicleBox.min.y * verticalScale + (config.floorClearance || 0),
-                -playerVehicleCenter.z * horizontalScale
+                -playerVehicleCenter.x * sourceScale,
+                -playerVehicleBox.min.y * sourceScale + (config.floorClearance || 0),
+                -playerVehicleCenter.z * sourceScale
             );
         }
 
