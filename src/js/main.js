@@ -104,11 +104,43 @@ const WAYPOINT_GOAL_ASSET_HEIGHT = 4.6;
 const WAYPOINT_GOAL_FLOOR_CLEARANCE = 0.26;
 const WAYPOINT_GOAL_MODEL_URL = './src/assets/models/optimized/waypoint-goal-purple-creature.glb?v=20260624-purple-creature-goal';
 const FREE_WAYPOINT_MARKER_URL = './src/assets/models/optimized/free-waypoint-marker.glb?v=20260624-free-waypoint';
-const PLAYER_VEHICLE_MODEL_URL = './src/assets/models/optimized/player-dragon-cart.glb?v=20260625-dragon-cart';
+const ORANGE_DRAGON_GOAL_MODEL_URL = './src/assets/models/optimized/goal-orange-dragon.glb?v=20260625-orange-dragon-goal';
 const FREE_WAYPOINT_MARKER_HEIGHT = 2.35;
 const FREE_WAYPOINT_MARKER_FLOOR_CLEARANCE = 0.16;
 const PLAYER_VEHICLE_TARGET_LENGTH = TILE_SIZE * 0.78;
-const PLAYER_VEHICLE_YAW_OFFSET = Math.PI / 2;
+const ORANGE_DRAGON_GOAL_ASSET_HEIGHT = 4.9;
+const ORANGE_DRAGON_GOAL_FLOOR_CLEARANCE = 0.08;
+const PLAYER_VEHICLE_DEFAULT_ID = 'dragon-cart';
+const PLAYER_VEHICLE_STORAGE_KEY = 'drive_player_vehicle_v1';
+const PLAYER_VEHICLE_ASSETS = Object.freeze({
+    'dragon-cart': {
+        id: 'dragon-cart',
+        url: './src/assets/models/optimized/player-dragon-cart.glb?v=20260625-dragon-cart',
+        sourceName: 'playerDragonCartSource',
+        wrapperName: 'playerDragonCartAsset',
+        modelName: 'playerDragonCartModel',
+        yawOffset: Math.PI / 2,
+        targetLength: PLAYER_VEHICLE_TARGET_LENGTH
+    },
+    'vintage-classic': {
+        id: 'vintage-classic',
+        url: './src/assets/models/optimized/player-vintage-classic-car.glb?v=20260625-vintage-classic-car',
+        sourceName: 'playerVintageClassicCarSource',
+        wrapperName: 'playerVintageClassicCarAsset',
+        modelName: 'playerVintageClassicCarModel',
+        yawOffset: 0,
+        targetLength: PLAYER_VEHICLE_TARGET_LENGTH
+    },
+    'vintage-car': {
+        id: 'vintage-car',
+        url: './src/assets/models/optimized/player-vintage-car.glb?v=20260625-vintage-car',
+        sourceName: 'playerVintageCarSource',
+        wrapperName: 'playerVintageCarAsset',
+        modelName: 'playerVintageCarModel',
+        yawOffset: 0,
+        targetLength: PLAYER_VEHICLE_TARGET_LENGTH
+    }
+});
 const DEFAULT_ASSET_SIZES = Object.freeze({
     goal: 1,
     waypoint: 1,
@@ -118,8 +150,11 @@ const EDITOR_ASSET_SIZE_MIN = 0.5;
 const EDITOR_ASSET_SIZE_MAX = 1.8;
 let defaultFloorTexturePromise = null;
 let waypointGoalModelPromise = null;
+let orangeDragonGoalModelPromise = null;
 let freeWaypointMarkerPromise = null;
-let playerVehicleModelPromise = null;
+const playerVehicleModelPromises = new Map();
+let selectedPlayerVehicleId = readStoredPlayerVehicleId();
+let syncPlayerVehicleSelectionUI = () => {};
 const tripoGoalBox = new THREE.Box3();
 const tripoGoalSize = new THREE.Vector3();
 const tripoGoalCenter = new THREE.Vector3();
@@ -131,6 +166,44 @@ const SOUND_ENABLED_STORAGE_KEY = 'drive_sound_enabled_v1';
 const SOUND_VOLUME_STORAGE_KEY = 'drive_sound_volume_v2';
 
 THREE.Cache.enabled = true;
+
+function readStoredPlayerVehicleId() {
+    try {
+        const storedVehicleId = localStorage.getItem(PLAYER_VEHICLE_STORAGE_KEY);
+        if (storedVehicleId && PLAYER_VEHICLE_ASSETS[storedVehicleId]) return storedVehicleId;
+    } catch (e) {
+        // localStorage may be unavailable in some embedded contexts.
+    }
+    return PLAYER_VEHICLE_DEFAULT_ID;
+}
+
+function getPlayerVehicleConfig(vehicleId = selectedPlayerVehicleId) {
+    return PLAYER_VEHICLE_ASSETS[vehicleId] || PLAYER_VEHICLE_ASSETS[PLAYER_VEHICLE_DEFAULT_ID];
+}
+
+function setSelectedPlayerVehicle(vehicleId, { save = true } = {}) {
+    if (!PLAYER_VEHICLE_ASSETS[vehicleId] || selectedPlayerVehicleId === vehicleId) {
+        syncPlayerVehicleSelectionUI();
+        return;
+    }
+    selectedPlayerVehicleId = vehicleId;
+    if (save) {
+        try { localStorage.setItem(PLAYER_VEHICLE_STORAGE_KEY, selectedPlayerVehicleId); } catch (e) {}
+    }
+    syncPlayerVehicleSelectionUI();
+    refreshPlayerVehicleModel();
+}
+
+function refreshPlayerVehicleModel() {
+    if (!player) return;
+    if (playerCarModel) {
+        player.remove(playerCarModel);
+        playerCarModel = null;
+    }
+    playerCarModel = createPlayerVehicleAsset(selectedPlayerVehicleId);
+    player.add(playerCarModel);
+    playerCarModel.visible = viewMode === '3P';
+}
 
 // Texture customization variables
 let textureURLs = { floor: null, wallN: null, wallS: null, wallE: null, wallW: null };
@@ -309,9 +382,8 @@ async function init() {
     player = new THREE.Object3D();
     scene.add(player);
     
-    // Initialize Player Car Model for 3P view (v10.0)
-    playerCarModel = createPlayerDragonCartAsset();
-    player.add(playerCarModel);
+    // Initialize selected player model for 3P view (v10.0)
+    refreshPlayerVehicleModel();
     
     // Camera setup (Parented to player) (v10.0)
     player.add(camera);
@@ -819,6 +891,19 @@ function setupUI() {
     // View Toggle Setup (v10.0)
     document.getElementById('view-1p-btn').addEventListener('click', () => setViewMode('1P'));
     document.getElementById('view-3p-btn').addEventListener('click', () => setViewMode('3P'));
+
+    const playerVehicleButtons = document.querySelectorAll('[data-player-vehicle]');
+    syncPlayerVehicleSelectionUI = () => {
+        playerVehicleButtons.forEach(button => {
+            const isSelected = button.dataset.playerVehicle === selectedPlayerVehicleId;
+            button.classList.toggle('active', isSelected);
+            button.setAttribute('aria-checked', String(isSelected));
+        });
+    };
+    playerVehicleButtons.forEach(button => {
+        button.addEventListener('click', () => setSelectedPlayerVehicle(button.dataset.playerVehicle));
+    });
+    syncPlayerVehicleSelectionUI();
 
     // NEW: Setup 3P control listeners
     const zoomSlider = document.getElementById('zoom-slider');
@@ -2184,6 +2269,31 @@ function loadWaypointGoalModelSource() {
     return waypointGoalModelPromise;
 }
 
+function loadOrangeDragonGoalModelSource() {
+    if (!orangeDragonGoalModelPromise) {
+        const loader = new GLTFLoader();
+        orangeDragonGoalModelPromise = loader.loadAsync(ORANGE_DRAGON_GOAL_MODEL_URL).then((gltf) => {
+            const source = gltf.scene || gltf.scenes?.[0];
+            if (!source) throw new Error('Orange dragon goal GLB did not contain a scene.');
+
+            source.name = 'orangeDragonGoalSource';
+            source.traverse((child) => {
+                if (!child.isMesh) return;
+                child.castShadow = false;
+                child.receiveShadow = true;
+                child.frustumCulled = true;
+                prepareStandaloneAssetMesh(child);
+            });
+            return source;
+        }).catch((error) => {
+            console.warn('Failed to load orange dragon goal model.', error);
+            orangeDragonGoalModelPromise = null;
+            return null;
+        });
+    }
+    return orangeDragonGoalModelPromise;
+}
+
 function loadFreeWaypointMarkerSource() {
     if (!freeWaypointMarkerPromise) {
         const loader = new GLTFLoader();
@@ -2218,14 +2328,15 @@ function prepareStandaloneAssetMesh(mesh) {
     });
 }
 
-function loadPlayerVehicleSource() {
-    if (!playerVehicleModelPromise) {
+function loadPlayerVehicleSource(vehicleId = selectedPlayerVehicleId) {
+    const config = getPlayerVehicleConfig(vehicleId);
+    if (!playerVehicleModelPromises.has(config.id)) {
         const loader = new GLTFLoader();
-        playerVehicleModelPromise = loader.loadAsync(PLAYER_VEHICLE_MODEL_URL).then((gltf) => {
+        const vehiclePromise = loader.loadAsync(config.url).then((gltf) => {
             const source = gltf.scene || gltf.scenes?.[0];
             if (!source) throw new Error('Player vehicle GLB did not contain a scene.');
 
-            source.name = 'playerDragonCartSource';
+            source.name = config.sourceName;
             source.traverse((child) => {
                 if (!child.isMesh) return;
                 child.castShadow = false;
@@ -2235,23 +2346,26 @@ function loadPlayerVehicleSource() {
             });
             return source;
         }).catch((error) => {
-            console.warn('Failed to load player dragon cart model.', error);
-            playerVehicleModelPromise = null;
+            console.warn(`Failed to load player vehicle model: ${config.id}`, error);
+            playerVehicleModelPromises.delete(config.id);
             return null;
         });
+        playerVehicleModelPromises.set(config.id, vehiclePromise);
     }
-    return playerVehicleModelPromise;
+    return playerVehicleModelPromises.get(config.id);
 }
 
-function createPlayerDragonCartAsset() {
+function createPlayerVehicleAsset(vehicleId = selectedPlayerVehicleId) {
+    const config = getPlayerVehicleConfig(vehicleId);
     const wrapper = new THREE.Group();
-    wrapper.name = 'playerDragonCartAsset';
+    wrapper.name = config.wrapperName;
+    wrapper.userData.vehicleId = config.id;
 
-    loadPlayerVehicleSource().then((source) => {
+    loadPlayerVehicleSource(config.id).then((source) => {
         if (!source || !wrapper.parent) return;
         const model = source.clone(true);
-        model.name = 'playerDragonCartModel';
-        model.rotation.y = PLAYER_VEHICLE_YAW_OFFSET;
+        model.name = config.modelName;
+        model.rotation.y = config.yawOffset;
         wrapper.add(model);
 
         model.updateMatrixWorld(true);
@@ -2260,7 +2374,7 @@ function createPlayerDragonCartAsset() {
             playerVehicleBox.getSize(playerVehicleSize);
             playerVehicleBox.getCenter(playerVehicleCenter);
             const sourceLength = Math.max(playerVehicleSize.z, playerVehicleSize.x, 0.001);
-            const sourceScale = PLAYER_VEHICLE_TARGET_LENGTH / sourceLength;
+            const sourceScale = config.targetLength / sourceLength;
             model.scale.setScalar(sourceScale);
             model.position.set(
                 -playerVehicleCenter.x * sourceScale,
@@ -2279,6 +2393,11 @@ function createPlayerDragonCartAsset() {
 function createWaypointGoalModelInstance(source, assetSize = 1) {
     const goalAssetSize = clampAssetSize(assetSize, DEFAULT_ASSET_SIZES.goal);
     return createScaledStandaloneModel(source, WAYPOINT_GOAL_ASSET_HEIGHT * goalAssetSize, 'waypointPurpleCreatureGoal', 'waypointPurpleCreatureModel');
+}
+
+function createOrangeDragonGoalModelInstance(source, assetSize = 1) {
+    const goalAssetSize = clampAssetSize(assetSize, DEFAULT_ASSET_SIZES.goal);
+    return createScaledStandaloneModel(source, ORANGE_DRAGON_GOAL_ASSET_HEIGHT * goalAssetSize, 'orangeDragonGoal', 'orangeDragonGoalModel');
 }
 
 function createScaledStandaloneModel(source, targetHeight, wrapperName, modelName) {
@@ -2353,22 +2472,74 @@ function attachWaypointGoalModelToGoal(marker, loadingPlaceholder, assetSize = 1
     });
 }
 
+function createOrangeDragonLoadingPlaceholder(assetSize = 1) {
+    const group = new THREE.Group();
+    group.name = 'orangeDragonLoadingPlaceholder';
+    const coreMat = new THREE.MeshBasicMaterial({ color: 0xff8a24, transparent: true, opacity: 0.72 });
+    const glowMat = new THREE.MeshBasicMaterial({ color: 0xffc247, transparent: true, opacity: 0.26, depthWrite: false });
+    const core = new THREE.Mesh(new THREE.OctahedronGeometry(0.8 * assetSize, 0), coreMat);
+    core.position.y = 1.1 * assetSize;
+    const glow = new THREE.Mesh(new THREE.SphereGeometry(1.25 * assetSize, 12, 8), glowMat);
+    glow.position.copy(core.position);
+    group.add(glow, core);
+    return group;
+}
+
+function attachOrangeDragonGoalModelToGoal(marker, loadingPlaceholder, assetSize = 1) {
+    const requestId = Symbol('orange-dragon-goal-model');
+    const goalAssetSize = clampAssetSize(assetSize, DEFAULT_ASSET_SIZES.goal);
+    marker.userData.orangeDragonGoalRequestId = requestId;
+    marker.userData.orangeDragonGoalLoading = true;
+
+    loadOrangeDragonGoalModelSource().then((source) => {
+        if (goalMarker !== marker || marker.userData.orangeDragonGoalRequestId !== requestId) {
+            return;
+        }
+
+        if (!source) {
+            if (loadingPlaceholder?.parent === marker) marker.remove(loadingPlaceholder);
+            const fallbackCat = createLuckyCat();
+            fallbackCat.scale.setScalar(1.5 * goalAssetSize);
+            marker.add(fallbackCat);
+            marker.userData.orangeDragonGoalLoading = false;
+            return;
+        }
+
+        const orangeDragonGoalModel = createOrangeDragonGoalModelInstance(source, goalAssetSize);
+        orangeDragonGoalModel.position.y = ORANGE_DRAGON_GOAL_FLOOR_CLEARANCE - GOAL_MARKER_BASE_Y;
+
+        if (loadingPlaceholder?.parent === marker) marker.remove(loadingPlaceholder);
+        marker.add(orangeDragonGoalModel);
+
+        luckyCatArm = null;
+        luckyCatWrist = null;
+        marker.userData.orangeDragonGoalLoading = false;
+        marker.userData.orangeDragonGoalLoaded = true;
+    });
+}
+
 function createGoalMarker(goalCoords, assetSizes = DEFAULT_ASSET_SIZES) {
     const level = (currentLevelIndex === -1) ? customLevels[selectedCustomMapIndex] : levels[currentLevelIndex];
     const goalPos = gridToWorld(goalCoords.x, goalCoords.z, level.grid);
     const isTechGoal = currentLevelState.isWaypointMode;
+    const isOrangeDragonGoal = !isTechGoal && currentLevelIndex === levels.length - 1;
     const goalAssetSize = clampAssetSize(assetSizes.goal, DEFAULT_ASSET_SIZES.goal);
     luckyCatArm = null;
     luckyCatWrist = null;
     floatingHeart = null;
     goalMarker = new THREE.Group();
     goalMarker.userData.techGoal = isTechGoal;
+    goalMarker.userData.orangeDragonGoal = isOrangeDragonGoal;
     let cat;
     if (isTechGoal) {
         cat = new THREE.Group();
         cat.name = 'waypointGoalLoadingPlaceholder';
         goalMarker.add(cat);
         attachWaypointGoalModelToGoal(goalMarker, cat, goalAssetSize);
+    } else if (isOrangeDragonGoal) {
+        cat = createOrangeDragonLoadingPlaceholder(goalAssetSize);
+        goalMarker.add(cat);
+        attachOrangeDragonGoalModelToGoal(goalMarker, cat, goalAssetSize);
     } else {
         cat = createLuckyCat();
         cat.scale.setScalar(1.5 * goalAssetSize);

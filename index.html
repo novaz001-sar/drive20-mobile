@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#0f766e">
     <title>Happy Drive Mobile</title>
     <link rel="preload" as="image" href="./src/assets/floor-cell-mobile-512.webp?v=20260620-4" type="image/webp" fetchpriority="high">
-    <link rel="stylesheet" href="./src/styles/main.css?v=20260625-third-person-panel-toggle">
+    <link rel="stylesheet" href="./src/styles/main.css?v=20260625-avatar-dragon-goal">
 </head>
 <body>
     <div id="game-container"></div>
@@ -352,6 +352,23 @@
                 <p class="instruction-text" data-lang-zh="请先看清路线，准备好后，点击“开始驾驶”按钮或地图。" data-lang-en="Review the route first. When ready, tap Start Driving or the map.">
                     请先看清路线，准备好后，点击“开始驾驶”按钮或地图。
                 </p>
+                <div id="player-avatar-select" class="player-avatar-select">
+                    <h4 data-lang-zh="选择玩家形象" data-lang-en="Choose Player">选择玩家形象</h4>
+                    <div class="vehicle-choice-grid" role="radiogroup" aria-label="Player avatar">
+                        <button type="button" class="vehicle-choice-btn active" data-player-vehicle="dragon-cart" role="radio" aria-checked="true">
+                            <span class="vehicle-choice-swatch dragon-cart"></span>
+                            <span data-lang-zh="龙车" data-lang-en="Dragon Cart">龙车</span>
+                        </button>
+                        <button type="button" class="vehicle-choice-btn" data-player-vehicle="vintage-classic" role="radio" aria-checked="false">
+                            <span class="vehicle-choice-swatch vintage-classic"></span>
+                            <span data-lang-zh="经典老爷车" data-lang-en="Classic Car">经典老爷车</span>
+                        </button>
+                        <button type="button" class="vehicle-choice-btn" data-player-vehicle="vintage-car" role="radio" aria-checked="false">
+                            <span class="vehicle-choice-swatch vintage-car"></span>
+                            <span data-lang-zh="复古汽车" data-lang-en="Vintage Car">复古汽车</span>
+                        </button>
+                    </div>
+                </div>
                 <button id="start-driving-btn" type="button" data-lang-zh="开始驾驶" data-lang-en="Start Driving">开始驾驶</button>
             </div>
             <div id="big-map-container-wrapper">
@@ -384,6 +401,6 @@
             }
         }
     </script>
-    <script type="module" src="./src/js/main.js?v=20260625-third-person-panel-toggle"></script>
+    <script type="module" src="./src/js/main.js?v=20260625-avatar-dragon-goal"></script>
 </body>
 </html>
