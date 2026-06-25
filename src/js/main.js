@@ -120,7 +120,10 @@ const PLAYER_VEHICLE_ASSETS = Object.freeze({
         wrapperName: 'playerDragonCartAsset',
         modelName: 'playerDragonCartModel',
         yawOffset: Math.PI / 2,
-        targetLength: PLAYER_VEHICLE_TARGET_LENGTH
+        primaryColor: 0xff8a2a,
+        accentColor: 0xf3d45c,
+        targetLength: PLAYER_VEHICLE_TARGET_LENGTH,
+        floorClearance: 0
     },
     'vintage-classic': {
         id: 'vintage-classic',
@@ -129,7 +132,11 @@ const PLAYER_VEHICLE_ASSETS = Object.freeze({
         wrapperName: 'playerVintageClassicCarAsset',
         modelName: 'playerVintageClassicCarModel',
         yawOffset: 0,
-        targetLength: PLAYER_VEHICLE_TARGET_LENGTH
+        primaryColor: 0xc3473d,
+        accentColor: 0xe7edf3,
+        targetLength: PLAYER_VEHICLE_TARGET_LENGTH,
+        targetHeight: WALL_HEIGHT * 0.95,
+        floorClearance: 0.12
     },
     'vintage-car': {
         id: 'vintage-car',
@@ -138,7 +145,11 @@ const PLAYER_VEHICLE_ASSETS = Object.freeze({
         wrapperName: 'playerVintageCarAsset',
         modelName: 'playerVintageCarModel',
         yawOffset: 0,
-        targetLength: PLAYER_VEHICLE_TARGET_LENGTH
+        primaryColor: 0x4977a8,
+        accentColor: 0xf4d06f,
+        targetLength: PLAYER_VEHICLE_TARGET_LENGTH,
+        targetHeight: WALL_HEIGHT * 0.95,
+        floorClearance: 0.12
     }
 });
 const DEFAULT_ASSET_SIZES = Object.freeze({
@@ -1651,8 +1662,11 @@ if (isWaypointNext) {
 function showLevelComplete() {
     const modal = document.getElementById('level-complete-modal');
     const lang = translations[currentLanguage];
+    const nickname = playerInfo.nickname || (currentLanguage === 'zh' ? '司机' : 'Driver');
     
-    document.getElementById('results-title').textContent = lang.levelComplete;
+    document.getElementById('results-title').textContent = lang.levelCompleteWithName
+        ? lang.levelCompleteWithName(nickname)
+        : lang.levelComplete;
     modal.style.display = 'flex';
 }
 
@@ -2328,6 +2342,18 @@ function prepareStandaloneAssetMesh(mesh) {
     });
 }
 
+function preparePlayerVehicleMesh(mesh) {
+    mesh.frustumCulled = false;
+    mesh.renderOrder = 30;
+    prepareStandaloneAssetMesh(mesh);
+    const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    materials.filter(Boolean).forEach((material) => {
+        material.depthTest = false;
+        material.depthWrite = false;
+        material.needsUpdate = true;
+    });
+}
+
 function loadPlayerVehicleSource(vehicleId = selectedPlayerVehicleId) {
     const config = getPlayerVehicleConfig(vehicleId);
     if (!playerVehicleModelPromises.has(config.id)) {
@@ -2341,8 +2367,7 @@ function loadPlayerVehicleSource(vehicleId = selectedPlayerVehicleId) {
                 if (!child.isMesh) return;
                 child.castShadow = false;
                 child.receiveShadow = false;
-                child.frustumCulled = true;
-                prepareStandaloneAssetMesh(child);
+                preparePlayerVehicleMesh(child);
             });
             return source;
         }).catch((error) => {
@@ -2355,18 +2380,82 @@ function loadPlayerVehicleSource(vehicleId = selectedPlayerVehicleId) {
     return playerVehicleModelPromises.get(config.id);
 }
 
+function createPlayerVehiclePlaceholder(config) {
+    const group = new THREE.Group();
+    group.name = `${config.id}LoadingPlaceholder`;
+    group.userData.isVehiclePlaceholder = true;
+
+    const bodyMat = createSatinMetalMaterial(config.primaryColor, { metalness: 0.36, roughness: 0.34, clearcoat: 0.42 });
+    const accentMat = createSatinMetalMaterial(config.accentColor, { metalness: 0.42, roughness: 0.28, clearcoat: 0.38 });
+    const darkMat = createSatinMetalMaterial(0x1f2933, { metalness: 0.28, roughness: 0.42, clearcoat: 0.2 });
+    const lightMat = new THREE.MeshBasicMaterial({ color: 0xfff2b8 });
+    const wheelMat = createSatinMetalMaterial(0x111827, { metalness: 0.18, roughness: 0.48 });
+
+    if (config.id === 'dragon-cart') {
+        const body = new THREE.Mesh(new THREE.BoxGeometry(3.8, 1.2, 5.2), bodyMat);
+        body.position.y = 0.9;
+        const nose = new THREE.Mesh(new THREE.ConeGeometry(1.25, 2.2, 5), accentMat);
+        nose.position.set(0, 1.25, -3.2);
+        nose.rotation.x = Math.PI / 2;
+        const crest = new THREE.Mesh(new THREE.ConeGeometry(0.45, 1.1, 4), accentMat);
+        crest.position.set(0, 2.0, -1.0);
+        crest.rotation.x = Math.PI / 2;
+        const tail = new THREE.Mesh(new THREE.ConeGeometry(0.7, 1.4, 5), bodyMat);
+        tail.position.set(0, 1.15, 3.35);
+        tail.rotation.x = -Math.PI / 2;
+        group.add(body, nose, crest, tail);
+    } else {
+        const body = new THREE.Mesh(new THREE.BoxGeometry(3.7, 1.0, 5.8), bodyMat);
+        body.position.y = 0.9;
+        const hood = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.42, 2.2), accentMat);
+        hood.position.set(0, 1.36, -1.8);
+        const cabin = new THREE.Mesh(new THREE.BoxGeometry(2.45, 1.05, 1.9), darkMat);
+        cabin.position.set(0, 1.85, 0.85);
+        const windshield = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.08, 0.9), accentMat);
+        windshield.position.set(0, 2.24, -0.2);
+        const leftHeadlight = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.24, 0.12), lightMat);
+        leftHeadlight.position.set(-1.05, 1.05, -2.96);
+        const rightHeadlight = leftHeadlight.clone();
+        rightHeadlight.position.x = 1.05;
+        group.add(body, hood, cabin, windshield, leftHeadlight, rightHeadlight);
+    }
+
+    const wheelGeometry = new THREE.CylinderGeometry(0.48, 0.48, 0.34, 14);
+    const wheelPositions = [
+        [-1.85, 0.52, -1.95],
+        [1.85, 0.52, -1.95],
+        [-1.85, 0.52, 1.95],
+        [1.85, 0.52, 1.95]
+    ];
+    wheelPositions.forEach(([x, y, z]) => {
+        const wheel = new THREE.Mesh(wheelGeometry, wheelMat);
+        wheel.rotation.z = Math.PI / 2;
+        wheel.position.set(x, y, z);
+        group.add(wheel);
+    });
+
+    group.traverse((child) => {
+        if (child.isMesh) preparePlayerVehicleMesh(child);
+    });
+
+    return group;
+}
+
 function createPlayerVehicleAsset(vehicleId = selectedPlayerVehicleId) {
     const config = getPlayerVehicleConfig(vehicleId);
     const wrapper = new THREE.Group();
     wrapper.name = config.wrapperName;
     wrapper.userData.vehicleId = config.id;
+    wrapper.scale.setScalar(thirdPersonControls.carScale);
+
+    const placeholder = createPlayerVehiclePlaceholder(config);
+    wrapper.add(placeholder);
 
     loadPlayerVehicleSource(config.id).then((source) => {
         if (!source || !wrapper.parent) return;
         const model = source.clone(true);
         model.name = config.modelName;
         model.rotation.y = config.yawOffset;
-        wrapper.add(model);
 
         model.updateMatrixWorld(true);
         playerVehicleBox.setFromObject(model);
@@ -2374,15 +2463,21 @@ function createPlayerVehicleAsset(vehicleId = selectedPlayerVehicleId) {
             playerVehicleBox.getSize(playerVehicleSize);
             playerVehicleBox.getCenter(playerVehicleCenter);
             const sourceLength = Math.max(playerVehicleSize.z, playerVehicleSize.x, 0.001);
-            const sourceScale = config.targetLength / sourceLength;
-            model.scale.setScalar(sourceScale);
+            const sourceHeight = Math.max(playerVehicleSize.y, 0.001);
+            const horizontalScale = config.targetLength / sourceLength;
+            const verticalScale = config.targetHeight
+                ? Math.max(horizontalScale, config.targetHeight / sourceHeight)
+                : horizontalScale;
+            model.scale.set(horizontalScale, verticalScale, horizontalScale);
             model.position.set(
-                -playerVehicleCenter.x * sourceScale,
-                -playerVehicleBox.min.y * sourceScale,
-                -playerVehicleCenter.z * sourceScale
+                -playerVehicleCenter.x * horizontalScale,
+                -playerVehicleBox.min.y * verticalScale + (config.floorClearance || 0),
+                -playerVehicleCenter.z * horizontalScale
             );
         }
 
+        if (placeholder.parent === wrapper) wrapper.remove(placeholder);
+        wrapper.add(model);
         wrapper.visible = viewMode === '3P';
         wrapper.scale.setScalar(thirdPersonControls.carScale);
     });

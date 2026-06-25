@@ -5,6 +5,7 @@ export const translations = {
     zh: {
         welcome: (nickname) => `你好, ${nickname}!`,
         levelComplete: "关卡完成！",
+        levelCompleteWithName: (nickname) => `${nickname}，恭喜通关！`,
         freeModeComplete: "自由模式练习完成。",
         select: "选择",
         forward: "向前",
@@ -37,6 +38,7 @@ export const translations = {
     en: {
         welcome: (nickname) => `Hello, ${nickname}!`,
         levelComplete: "Level Complete!",
+        levelCompleteWithName: (nickname) => `Great drive, ${nickname}! Level Complete!`,
         freeModeComplete: "Free mode practice complete.",
         select: "Select",
         forward: "Forward",
