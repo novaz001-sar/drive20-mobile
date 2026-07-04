@@ -24,6 +24,7 @@ let lastMinimapRenderKey = '';
 let activeLampLights = [];
 let activeTechWallEffects = [];
 let activeFreeWaypointMixers = [];
+const freeWaypointFacingTarget = new THREE.Vector3();
 let minimapOrientationMode = 'NORTH_UP'; // 'NORTH_UP' | 'HEADING_UP'
 try {
     const savedMinimapMode = localStorage.getItem('minimap_orientation_mode_v1');
@@ -106,7 +107,7 @@ const WAYPOINT_GOAL_ASSET_HEIGHT = 4.6;
 const WAYPOINT_GOAL_FLOOR_CLEARANCE = 0.26;
 const WAYPOINT_GOAL_MODEL_URL = './src/assets/models/optimized/waypoint-goal-purple-creature.glb?v=20260624-purple-creature-goal';
 const FREE_WAYPOINT_MARKER_URL = './src/assets/models/optimized/free-waypoint-marker.glb?v=20260624-free-waypoint';
-const FREE_WAYPOINT_FRIEZA_MARKER_URL = './src/assets/models/optimized/free-waypoint-frieza-salute.glb?v=20260704-frieza-look-v4';
+const FREE_WAYPOINT_FRIEZA_MARKER_URL = './src/assets/models/optimized/free-waypoint-frieza-salute.glb?v=20260704-frieza-source-v5';
 const ORANGE_DRAGON_GOAL_MODEL_URL = './src/assets/models/optimized/goal-orange-dragon.glb?v=20260625-model-fix';
 const FREE_WAYPOINT_MARKER_HEIGHT = 2.35;
 const FREE_WAYPOINT_MARKER_FLOOR_CLEARANCE = 0.16;
@@ -1795,7 +1796,14 @@ function animate() {
     }
 
     waypointsGroup.children.forEach(wp => {
-        wp.rotation.y += delta * (wp.userData.variant === 'frieza' ? 0.08 : 0.5);
+        if (wp.userData.variant === 'frieza' && camera) {
+            camera.getWorldPosition(freeWaypointFacingTarget);
+            const dx = freeWaypointFacingTarget.x - wp.position.x;
+            const dz = freeWaypointFacingTarget.z - wp.position.z;
+            if (Math.hypot(dx, dz) > 0.01) wp.rotation.y = Math.atan2(dx, dz);
+        } else {
+            wp.rotation.y += delta * 0.5;
+        }
         const gem = wp.getObjectByName('waypoint_gem');
         if (gem) gem.rotation.y += delta * 1.5;
     });
@@ -2648,7 +2656,10 @@ function createFreeWaypointMarker(index, assetSize = 1, variantId = FREE_WAYPOIN
             config.modelName
         );
         markerModel.position.y = config.floorClearance;
-        if (config.id === 'frieza') markerModel.rotation.y = Math.PI;
+        if (config.id === 'frieza') {
+            markerModel.rotation.x = 0;
+            markerModel.rotation.y = 0;
+        }
         marker.add(markerModel);
         startFreeWaypointMarkerAnimation(marker, markerModel, source, config);
     });
