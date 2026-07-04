@@ -814,6 +814,12 @@ body.level-celebration-flash::after {
     box-shadow: 0 0 0 2px rgba(0, 194, 255, 0.28);
     pointer-events: none;
 }
+.free-waypoint-marker.figure {
+    background: linear-gradient(145deg, #fbbf24, #ef4444 58%, #111827);
+    border-color: #fef3c7;
+    box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.32), 0 0 10px rgba(239, 68, 68, 0.42);
+    font-family: Georgia, serif;
+}
 
 .lang-en { display: none; }
 

@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#0f766e">
     <title>Happy Drive Mobile</title>
     <link rel="preload" as="image" href="./src/assets/floor-cell-mobile-512.webp?v=20260620-4" type="image/webp" fetchpriority="high">
-    <link rel="stylesheet" href="./src/styles/main.css?v=20260625-avatar-thumbs-success">
+    <link rel="stylesheet" href="./src/styles/main.css?v=20260704-frieza-look-v4">
 </head>
 <body>
     <div id="game-container"></div>
@@ -280,6 +280,13 @@
                         <span data-lang-zh="路标颜色" data-lang-en="Waypoint Color">路标颜色</span>
                         <input type="color" id="editor-waypoint-color" value="#8A2BE2">
                     </label>
+                    <label>
+                        <span data-lang-zh="è‡ªç”±è·¯æ ‡å½¢è±¡" data-lang-en="Free Mark Figure">Free Mark Figure</span>
+                        <select id="editor-free-waypoint-variant">
+                            <option value="classic" data-lang-zh="ç»å…¸æ˜Ÿæ ‡" data-lang-en="Classic Star">Classic Star</option>
+                            <option value="frieza" data-lang-zh="å•è†æ•¬ç¤¼äººå½¢" data-lang-en="Saluting Figure">Saluting Figure</option>
+                        </select>
+                    </label>
                 </div>
                 <div class="editor-row" id="editor-asset-size-controls">
                     <label class="editor-size-control" for="editor-goal-size-slider">
@@ -401,6 +408,6 @@
             }
         }
     </script>
-    <script type="module" src="./src/js/main.js?v=20260625-model-fix"></script>
+    <script type="module" src="./src/js/main.js?v=20260704-frieza-look-v4"></script>
 </body>
 </html>

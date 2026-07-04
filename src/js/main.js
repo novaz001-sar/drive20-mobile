@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { FontLoader } from 'three/addons/loaders/FontLoader.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { clone as cloneSkeleton } from 'three/addons/utils/SkeletonUtils.js';
 import { TextGeometry } from 'three/addons/geometries/TextGeometry.js';
 import { TILE_SIZE, WALL_HEIGHT, MOVE_SPEED, TURN_SPEED, LUCKY_CAT } from './constants.js';
 import { translations } from './i18n.js';
@@ -22,6 +23,7 @@ let minimapBgDirty = true;
 let lastMinimapRenderKey = '';
 let activeLampLights = [];
 let activeTechWallEffects = [];
+let activeFreeWaypointMixers = [];
 let minimapOrientationMode = 'NORTH_UP'; // 'NORTH_UP' | 'HEADING_UP'
 try {
     const savedMinimapMode = localStorage.getItem('minimap_orientation_mode_v1');
@@ -104,9 +106,42 @@ const WAYPOINT_GOAL_ASSET_HEIGHT = 4.6;
 const WAYPOINT_GOAL_FLOOR_CLEARANCE = 0.26;
 const WAYPOINT_GOAL_MODEL_URL = './src/assets/models/optimized/waypoint-goal-purple-creature.glb?v=20260624-purple-creature-goal';
 const FREE_WAYPOINT_MARKER_URL = './src/assets/models/optimized/free-waypoint-marker.glb?v=20260624-free-waypoint';
+const FREE_WAYPOINT_FRIEZA_MARKER_URL = './src/assets/models/optimized/free-waypoint-frieza-salute.glb?v=20260704-frieza-look-v4';
 const ORANGE_DRAGON_GOAL_MODEL_URL = './src/assets/models/optimized/goal-orange-dragon.glb?v=20260625-model-fix';
 const FREE_WAYPOINT_MARKER_HEIGHT = 2.35;
 const FREE_WAYPOINT_MARKER_FLOOR_CLEARANCE = 0.16;
+const FREE_WAYPOINT_FRIEZA_MARKER_HEIGHT = 4.15;
+const FREE_WAYPOINT_FRIEZA_FLOOR_CLEARANCE = 0.08;
+const FREE_WAYPOINT_DEFAULT_VARIANT = 'classic';
+const FREE_WAYPOINT_VARIANTS = Object.freeze({
+    classic: {
+        id: 'classic',
+        url: FREE_WAYPOINT_MARKER_URL,
+        sourceName: 'freeWaypointMarkerSource',
+        wrapperName: 'freeWaypointMarkerModelRoot',
+        modelName: 'freeWaypointMarkerModel',
+        targetHeight: FREE_WAYPOINT_MARKER_HEIGHT,
+        floorClearance: FREE_WAYPOINT_MARKER_FLOOR_CLEARANCE,
+        editorSymbol: '★',
+        minimapSymbol: '★',
+        minimapColor: '#00c2ff',
+        minimapVisitedColor: '#a7f3d0'
+    },
+    frieza: {
+        id: 'frieza',
+        url: FREE_WAYPOINT_FRIEZA_MARKER_URL,
+        sourceName: 'freeWaypointFriezaSource',
+        wrapperName: 'freeWaypointFriezaModelRoot',
+        modelName: 'freeWaypointFriezaModel',
+        animationName: 'KneelSaluteLoop',
+        targetHeight: FREE_WAYPOINT_FRIEZA_MARKER_HEIGHT,
+        floorClearance: FREE_WAYPOINT_FRIEZA_FLOOR_CLEARANCE,
+        editorSymbol: 'F',
+        minimapSymbol: 'F',
+        minimapColor: '#f59e0b',
+        minimapVisitedColor: '#fef3c7'
+    }
+});
 const PLAYER_VEHICLE_TARGET_LENGTH = TILE_SIZE * 0.78;
 const ORANGE_DRAGON_GOAL_ASSET_HEIGHT = 4.9;
 const ORANGE_DRAGON_GOAL_FLOOR_CLEARANCE = 0.08;
@@ -160,7 +195,7 @@ const EDITOR_ASSET_SIZE_MAX = 1.8;
 let defaultFloorTexturePromise = null;
 let waypointGoalModelPromise = null;
 let orangeDragonGoalModelPromise = null;
-let freeWaypointMarkerPromise = null;
+const freeWaypointMarkerPromises = new Map();
 const playerVehicleModelPromises = new Map();
 let selectedPlayerVehicleId = readStoredPlayerVehicleId();
 let syncPlayerVehicleSelectionUI = () => {};
@@ -257,6 +292,19 @@ function getLevelAssetSizes(level) {
         waypoint: clampAssetSize(source.waypoint, DEFAULT_ASSET_SIZES.waypoint),
         freeWaypoint: clampAssetSize(source.freeWaypoint, DEFAULT_ASSET_SIZES.freeWaypoint)
     };
+}
+
+function getFreeWaypointVariantId(value) {
+    return FREE_WAYPOINT_VARIANTS[value] ? value : FREE_WAYPOINT_DEFAULT_VARIANT;
+}
+
+function getFreeWaypointConfig(value) {
+    return FREE_WAYPOINT_VARIANTS[getFreeWaypointVariantId(value)];
+}
+
+function getEditorFreeWaypointVariantId() {
+    const select = document.getElementById('editor-free-waypoint-variant');
+    return getFreeWaypointVariantId(select?.value);
 }
 
 function isPortraitTouchScreen() {
@@ -1251,6 +1299,7 @@ function showMainMenu() {
     });
     activeLampLights = [];
     activeTechWallEffects = [];
+    clearFreeWaypointAnimationMixers();
     clearGoalHeartBursts();
     clearLevelCelebrations();
     minimapBgDirty = true;
@@ -1307,6 +1356,7 @@ function loadLevel(levelData) {
     });
     activeLampLights = [];
     activeTechWallEffects = [];
+    clearFreeWaypointAnimationMixers();
     clearGoalHeartBursts();
     clearLevelCelebrations();
     minimapBgDirty = true;
@@ -1343,7 +1393,7 @@ function loadLevel(levelData) {
     }
     if (currentLevelState.isWaypointMode && level.freeWaypoints && level.freeWaypoints.length > 0) {
         level.freeWaypoints.forEach((wp, index) => {
-            const freeWaypointMesh = createFreeWaypointMarker(index, assetSizes.freeWaypoint);
+            const freeWaypointMesh = createFreeWaypointMarker(index, assetSizes.freeWaypoint, wp.variant);
             const wpPos = gridToWorld(wp.x, wp.z, level.grid);
             freeWaypointMesh.position.set(wpPos.x, 0, wpPos.z);
             waypointsGroup.add(freeWaypointMesh);
@@ -1484,6 +1534,7 @@ function afterMoveChecks() {
             );
             if (freeWaypointMesh) {
                 freeWaypointMesh.userData.collected = true;
+                removeFreeWaypointAnimationMixer(freeWaypointMesh);
                 freeWaypointMesh.visible = false;
                 createFireworkEffect(freeWaypointMesh.position, '#00c2ff');
             } else {
@@ -1732,8 +1783,19 @@ function animate() {
         floatingHeart.rotation.y += delta * 0.6;
     }
 
+    for (let i = activeFreeWaypointMixers.length - 1; i >= 0; i--) {
+        const entry = activeFreeWaypointMixers[i];
+        if (!entry.marker.parent || entry.marker.userData.collected) {
+            if (typeof entry.animation.stopAllAction === 'function') entry.animation.stopAllAction();
+            if (typeof entry.animation.dispose === 'function') entry.animation.dispose();
+            activeFreeWaypointMixers.splice(i, 1);
+            continue;
+        }
+        entry.animation.update(delta, elapsedTime);
+    }
+
     waypointsGroup.children.forEach(wp => {
-        wp.rotation.y += delta * 0.5;
+        wp.rotation.y += delta * (wp.userData.variant === 'frieza' ? 0.08 : 0.5);
         const gem = wp.getObjectByName('waypoint_gem');
         if (gem) gem.rotation.y += delta * 1.5;
     });
@@ -2306,16 +2368,20 @@ function loadOrangeDragonGoalModelSource() {
     return orangeDragonGoalModelPromise;
 }
 
-function loadFreeWaypointMarkerSource() {
-    if (!freeWaypointMarkerPromise) {
+function loadFreeWaypointMarkerSource(variantId = FREE_WAYPOINT_DEFAULT_VARIANT) {
+    const config = getFreeWaypointConfig(variantId);
+    if (!freeWaypointMarkerPromises.has(config.id)) {
         const loader = new GLTFLoader();
-        freeWaypointMarkerPromise = loader.loadAsync(FREE_WAYPOINT_MARKER_URL).then((gltf) => {
+        const markerPromise = loader.loadAsync(config.url).then((gltf) => {
             const source = gltf.scene || gltf.scenes?.[0];
             if (!source) throw new Error('Free waypoint GLB did not contain a scene.');
 
-            source.name = 'freeWaypointMarkerSource';
+            source.name = config.sourceName;
+            source.userData.animations = gltf.animations || [];
+            source.userData.hasSkinnedMesh = false;
             source.traverse((child) => {
-                if (!child.isMesh) return;
+                if (child.isSkinnedMesh) source.userData.hasSkinnedMesh = true;
+                if (!child.isMesh && !child.isSkinnedMesh) return;
                 child.castShadow = false;
                 child.receiveShadow = true;
                 child.frustumCulled = true;
@@ -2323,12 +2389,13 @@ function loadFreeWaypointMarkerSource() {
             });
             return source;
         }).catch((error) => {
-            console.warn('Failed to load free waypoint marker model.', error);
-            freeWaypointMarkerPromise = null;
+            console.warn(`Failed to load free waypoint marker model: ${config.id}`, error);
+            freeWaypointMarkerPromises.delete(config.id);
             return null;
         });
+        freeWaypointMarkerPromises.set(config.id, markerPromise);
     }
-    return freeWaypointMarkerPromise;
+    return freeWaypointMarkerPromises.get(config.id);
 }
 
 function prepareStandaloneAssetMesh(mesh) {
@@ -2503,7 +2570,7 @@ function createOrangeDragonGoalModelInstance(source, assetSize = 1) {
 function createScaledStandaloneModel(source, targetHeight, wrapperName, modelName) {
     const wrapper = new THREE.Group();
     wrapper.name = wrapperName;
-    const model = source.clone(true);
+    const model = source.userData.hasSkinnedMesh ? cloneSkeleton(source) : source.clone(true);
     model.name = modelName;
     wrapper.add(model);
 
@@ -2525,24 +2592,65 @@ function createScaledStandaloneModel(source, targetHeight, wrapperName, modelNam
     return wrapper;
 }
 
-function createFreeWaypointMarker(index, assetSize = 1) {
+function removeFreeWaypointAnimationMixer(marker) {
+    const animation = marker?.userData?.animationMixer;
+    if (!animation) return;
+    if (typeof animation.stopAllAction === 'function') animation.stopAllAction();
+    if (typeof animation.dispose === 'function') animation.dispose();
+    activeFreeWaypointMixers = activeFreeWaypointMixers.filter((entry) => entry.animation !== animation);
+    marker.userData.animationMixer = null;
+}
+
+function clearFreeWaypointAnimationMixers() {
+    activeFreeWaypointMixers.forEach(({ animation }) => {
+        if (typeof animation.stopAllAction === 'function') animation.stopAllAction();
+        if (typeof animation.dispose === 'function') animation.dispose();
+    });
+    activeFreeWaypointMixers = [];
+}
+
+function startFreeWaypointMarkerAnimation(marker, markerModel, source, config) {
+    const clips = source?.userData?.animations || [];
+    if (!clips.length) return;
+
+    removeFreeWaypointAnimationMixer(marker);
+    const mixer = new THREE.AnimationMixer(markerModel);
+    const clipsToPlay = config.id === 'frieza'
+        ? clips
+        : [THREE.AnimationClip.findByName(clips, config.animationName) || clips[0]].filter(Boolean);
+    clipsToPlay.forEach((clip) => {
+        const action = mixer.clipAction(clip);
+        action.reset();
+        action.setLoop(THREE.LoopRepeat, Infinity);
+        action.play();
+    });
+    const animation = mixer;
+    marker.userData.animationMixer = animation;
+    activeFreeWaypointMixers.push({ marker, animation });
+}
+
+function createFreeWaypointMarker(index, assetSize = 1, variantId = FREE_WAYPOINT_DEFAULT_VARIANT) {
     const freeWaypointAssetSize = clampAssetSize(assetSize, DEFAULT_ASSET_SIZES.freeWaypoint);
+    const config = getFreeWaypointConfig(variantId);
     const marker = new THREE.Group();
     marker.name = `freeWaypointMarker_${index + 1}`;
     marker.userData.kind = 'freeWaypoint';
     marker.userData.waypointIndex = index;
     marker.userData.collected = false;
+    marker.userData.variant = config.id;
 
-    loadFreeWaypointMarkerSource().then((source) => {
+    loadFreeWaypointMarkerSource(config.id).then((source) => {
         if (!source || !marker.parent || marker.userData.collected) return;
         const markerModel = createScaledStandaloneModel(
             source,
-            FREE_WAYPOINT_MARKER_HEIGHT * freeWaypointAssetSize,
-            'freeWaypointMarkerModelRoot',
-            'freeWaypointMarkerModel'
+            config.targetHeight * freeWaypointAssetSize,
+            config.wrapperName,
+            config.modelName
         );
-        markerModel.position.y = FREE_WAYPOINT_MARKER_FLOOR_CLEARANCE;
+        markerModel.position.y = config.floorClearance;
+        if (config.id === 'frieza') markerModel.rotation.y = Math.PI;
         marker.add(markerModel);
+        startFreeWaypointMarkerAnimation(marker, markerModel, source, config);
     });
 
     return marker;
@@ -3511,13 +3619,14 @@ function drawMinimapBackground(ctx, canvas, grid, start, goal, waypoints, freeWa
     }
     if (freeWaypoints) {
         freeWaypoints.forEach((wp, index) => {
+            const config = getFreeWaypointConfig(wp.variant);
             const waypointKey = `${index}:${wp.x},${wp.z}`;
             const isVisited = touchedFreeWaypoints.has(waypointKey);
             const cx = (wp.x + 0.5) * cellWidth;
             const cy = (wp.z + 0.5) * cellHeight;
             const radius = Math.min(cellWidth, cellHeight) * 0.34;
             ctx.save();
-            ctx.fillStyle = isVisited ? '#a7f3d0' : '#00c2ff';
+            ctx.fillStyle = isVisited ? config.minimapVisitedColor : config.minimapColor;
             ctx.strokeStyle = isVisited ? '#047857' : '#0f172a';
             ctx.lineWidth = 2;
             ctx.beginPath();
@@ -3528,7 +3637,7 @@ function drawMinimapBackground(ctx, canvas, grid, start, goal, waypoints, freeWa
             ctx.font = `bold ${cellHeight * 0.45}px sans-serif`;
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
-            ctx.fillText('★', cx, cy + cellHeight * 0.02);
+            ctx.fillText(config.minimapSymbol, cx, cy + cellHeight * 0.02);
             ctx.restore();
         });
     }
@@ -3993,6 +4102,8 @@ function loadEditorGrid(index, mode) {
     }
 
     document.getElementById('editor-waypoint-mode-toggle').checked = editorState.isWaypointMode;
+    const freeWaypointVariantSelect = document.getElementById('editor-free-waypoint-variant');
+    if (freeWaypointVariantSelect) freeWaypointVariantSelect.value = FREE_WAYPOINT_DEFAULT_VARIANT;
     syncEditorAssetSizeControls();
 
     const xOffset = Math.floor((EDITOR_SIZE - sourceWidth) / 2);
@@ -4042,9 +4153,12 @@ function redrawEditorGrid() {
             }
             const freeWaypoint = editorState.freeWaypoints.find(wp => wp.x === x && wp.z === z);
             if (freeWaypoint) {
+                const config = getFreeWaypointConfig(freeWaypoint.variant);
                 const marker = document.createElement('div');
                 marker.className = 'free-waypoint-marker';
+                marker.classList.toggle('figure', config.id !== FREE_WAYPOINT_DEFAULT_VARIANT);
                 marker.textContent = '★';
+                marker.textContent = config.editorSymbol;
                 cell.appendChild(marker);
             }
             grid.appendChild(cell);
@@ -4098,7 +4212,7 @@ function handleGridInteraction(e, force = false) {
             editorState.gridData[z][x] = 0;
             editorState.isWaypointMode = true;
             document.getElementById('editor-waypoint-mode-toggle').checked = true;
-            editorState.freeWaypoints.push({x, z});
+            editorState.freeWaypoints.push({x, z, variant: getEditorFreeWaypointVariantId()});
             editorState.isDrawing = false;
             break;
         case 'highlight-floor':
@@ -4138,7 +4252,7 @@ function saveCustomMap() {
         goal: { ...goal },
         isWaypointMode: document.getElementById('editor-waypoint-mode-toggle').checked,
         waypoints: waypoints,
-        freeWaypoints: freeWaypoints,
+        freeWaypoints: freeWaypoints.map((wp) => ({ ...wp, variant: getFreeWaypointVariantId(wp.variant) })),
         highlightFloors: highlightFloors,
         assetSizes: getLevelAssetSizes({ assetSizes: editorState.assetSizes })
     };
