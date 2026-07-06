@@ -8,7 +8,7 @@ import { translations } from './i18n.js';
 import { levels } from './levels.js';
 
 // ====================================================================
-// 全局变量和状态机 (Global Variables & State Machine)
+// Global variables and state machine
 // ====================================================================
 
 let scene, camera, renderer, clock, fontLoader;
@@ -272,7 +272,7 @@ try {
 }
 
 // ====================================================================
-// 初始化函数 (Initialization)
+// Initialization
 // ====================================================================
 
 function prefersMobilePerformance() {
@@ -937,7 +937,7 @@ function setupUI() {
         currentLanguage = document.getElementById('initial-language-select').value;
         document.getElementById('language-select').value = currentLanguage;
         const nickname = document.getElementById('nickname-input').value.trim();
-        playerInfo.nickname = nickname || (currentLanguage === 'zh' ? '司机' : 'Driver');
+        playerInfo.nickname = nickname || 'Driver';
         playerInfo.gender = document.getElementById('gender-select').value;
         document.getElementById('startup-modal').style.display = 'none';
         document.getElementById('main-menu-modal').style.display = 'flex';
@@ -1324,7 +1324,7 @@ function showMainMenu() {
 }
 
 // ====================================================================
-// 游戏核心逻辑 (Core Game Logic)
+// Core game logic
 // ====================================================================
 
 function loadLevel(levelData) {
@@ -1712,7 +1712,7 @@ if (isWaypointNext) {
 function showLevelComplete() {
     const modal = document.getElementById('level-complete-modal');
     const lang = translations[currentLanguage];
-    const nickname = playerInfo.nickname || (currentLanguage === 'zh' ? '司机' : 'Driver');
+    const nickname = playerInfo.nickname || 'Driver';
     
     document.getElementById('results-title').textContent = lang.levelCompleteWithName
         ? lang.levelCompleteWithName(nickname)
@@ -1721,7 +1721,7 @@ function showLevelComplete() {
 }
 
 // ====================================================================
-// 渲染和动画 (Rendering & Animation)
+// Rendering and animation
 // ====================================================================
 
 function animate() {
@@ -2024,7 +2024,7 @@ function onWindowResize() {
 }
 
 // ====================================================================
-// 输入处理 (Input Handling)
+// Input handling
 // ====================================================================
 
 
@@ -2059,7 +2059,7 @@ function onKeyUp(event) {
 }
 
 // ====================================================================
-// 3D迷宫与视觉生成 (3D Maze & Visuals Generation)
+// 3D maze and visual generation
 // ====================================================================
 
 function createInstancedWallBatch(geometry, material, transforms) {
@@ -3512,7 +3512,7 @@ function createMaterials() {
 }
 
 // ====================================================================
-// 小地图 (Minimap)
+// Minimap
 // ====================================================================
 
 // NEW: Minimap orientation mode helpers (v10.1)
@@ -3527,18 +3527,11 @@ function updateMinimapOrientationButton() {
     const isHeadingUp = minimapOrientationMode === 'HEADING_UP';
     btn.classList.toggle('active', isHeadingUp);
 
-    // Button label: N (north-up) / 🚗 (heading-up)
-    btn.textContent = isHeadingUp ? '🚗' : 'N';
-
-    if (currentLanguage === 'zh') {
-        btn.title = isHeadingUp
-            ? '小地图：跟随车头（点击切换为北向固定）'
-            : '小地图：北向固定（点击切换为跟随车头）';
-    } else {
-        btn.title = isHeadingUp
-            ? 'Minimap: Heading-Up (click to switch to North-Up)'
-            : 'Minimap: North-Up (click to switch to Heading-Up)';
-    }
+    // Button label: N (north-up) / H (heading-up)
+    btn.textContent = isHeadingUp ? 'H' : 'N';
+    btn.title = isHeadingUp
+        ? 'Minimap: Heading-Up (click to switch to North-Up)'
+        : 'Minimap: North-Up (click to switch to Heading-Up)';
 }
 
 function toggleMinimapOrientationMode() {
@@ -3816,7 +3809,7 @@ function updateMinimapPlayer() {
 
 
 // ====================================================================
-// 菜单与UI逻辑 (Menu & UI Logic)
+// Menu and UI logic
 // ====================================================================
 
 function showFreeModeLevelSelect() {
@@ -3932,7 +3925,7 @@ function resetGame() {
 }
 
 // ====================================================================
-// 地图编辑器 (Map Editor) & Custom Maps
+// Map editor and custom maps
 // ====================================================================
 
 let editorState = {
@@ -4274,7 +4267,7 @@ function saveCustomMap() {
     saveCustomLevels();
     
     document.getElementById('editor-slot-select').options[slotIndex].textContent = `${translations[currentLanguage].map_slot} ${slotIndex + 1}`;
-    showEditorMessage(`${translations[currentLanguage].map_slot} ${slotIndex + 1} 已保存!`, false);
+    showEditorMessage(`${translations[currentLanguage].map_slot} ${slotIndex + 1} saved!`, false);
     if (currentEditorMode === 'builtin') {
         document.getElementById('editor-slot-select').value = slotIndex;
         document.getElementById('editor-mode-custom-btn').click();
@@ -4339,6 +4332,6 @@ function showCustomMapsModal() {
 }
 
 // ====================================================================
-// 启动 (Boot)
+// Boot
 // ====================================================================
 init();
