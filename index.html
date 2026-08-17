@@ -4,41 +4,42 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="theme-color" content="#0f766e">
-    <title>Happy Drive Mobile</title>
-    <link rel="preload" as="image" href="./src/assets/floor-cell-mobile-512.webp?v=20260620-4" type="image/webp" fetchpriority="high">
-    <link rel="stylesheet" href="./src/styles/main.css?v=20260706-english-v1">
+    <title>Happy Drive Mobile / 快乐驾驶移动版</title>
+    <link rel="icon" href="data:,">
+    <link rel="preload" as="image" href="./src/assets/floor-cell-mobile-512.webp?v=20260620-4" type="image/webp" fetchpriority="high" crossorigin="anonymous">
+    <link rel="stylesheet" href="./src/styles/main.css?v=20260817-bilingual-v3">
 </head>
 <body>
     <div id="game-container"></div>
 
     <div id="ui-container">
         <div id="view-toggle-container" style="display: none;">
-            <button id="view-1p-btn" class="view-toggle-btn active" data-lang-zh="1st Person" data-lang-en="1st Person">1st Person</button>
-            <button id="view-3p-btn" class="view-toggle-btn" data-lang-zh="3rd Person" data-lang-en="3rd Person">3rd Person</button>
+            <button id="view-1p-btn" class="view-toggle-btn active" data-lang-zh="第一人称" data-lang-en="1st Person">1st Person</button>
+            <button id="view-3p-btn" class="view-toggle-btn" data-lang-zh="第三人称" data-lang-en="3rd Person">3rd Person</button>
         </div>
         
         <!-- NEW: Third person camera controls -->
         <div id="third-person-controls">
-            <button type="button" id="third-person-panel-toggle-btn" class="third-person-panel-toggle-btn" aria-expanded="true" aria-controls="third-person-settings-panel" data-lang-zh="3P Controls" data-lang-en="3P Controls">3P Controls</button>
+            <button type="button" id="third-person-panel-toggle-btn" class="third-person-panel-toggle-btn" aria-expanded="true" aria-controls="third-person-settings-panel" data-lang-zh="第三人称设置" data-lang-en="3P Controls">3P Controls</button>
             <div id="third-person-settings-panel" class="third-person-settings-panel">
                 <div class="control-group view-direction-control">
-                    <label data-lang-zh="View Direction" data-lang-en="View Direction">View Direction</label>
+                    <label data-lang-zh="视角方向" data-lang-en="View Direction">View Direction</label>
                     <div id="third-person-camera-mode-toggle" class="segmented-control" role="group" aria-label="Third person camera direction">
-                        <button type="button" class="camera-mode-btn active" data-camera-mode="follow" data-lang-zh="Follow" data-lang-en="Follow">Follow</button>
-                        <button type="button" class="camera-mode-btn" data-camera-mode="overhead" data-lang-zh="Overhead" data-lang-en="Overhead">Overhead</button>
+                        <button type="button" class="camera-mode-btn active" data-camera-mode="follow" data-lang-zh="跟随" data-lang-en="Follow">Follow</button>
+                        <button type="button" class="camera-mode-btn" data-camera-mode="overhead" data-lang-zh="俯瞰" data-lang-en="Overhead">Overhead</button>
                     </div>
                 </div>
                 <div class="control-group">
-                    <label for="zoom-slider" data-lang-zh="Zoom" data-lang-en="Zoom">Zoom</label>
+                    <label for="zoom-slider" data-lang-zh="距离" data-lang-en="Zoom">Zoom</label>
                     <input type="range" id="zoom-slider" min="1.5" max="5" step="0.1" value="2.5">
                 </div>
                 <div class="control-group">
-                    <label for="angle-slider" data-lang-zh="Angle" data-lang-en="Angle">Angle</label>
+                    <label for="angle-slider" data-lang-zh="角度" data-lang-en="Angle">Angle</label>
                     <input type="range" id="angle-slider" min="25" max="85" step="1" value="45">
                 </div>
                 <!-- NEW: Car size control -->
                 <div class="control-group">
-                    <label for="car-size-slider" data-lang-zh="Size" data-lang-en="Size">Size</label>
+                    <label for="car-size-slider" data-lang-zh="大小" data-lang-en="Size">Size</label>
                     <input type="range" id="car-size-slider" min="0.5" max="1.6" step="0.05" value="1.0">
                 </div>
             </div>
@@ -54,7 +55,7 @@
         </div>
 
         <div id="mobile-drive-controls" aria-label="Mobile driving menu">
-            <button id="mobile-pause-btn" class="mobile-drive-btn menu" type="button" data-action="pause" data-lang-zh="Menu" data-lang-en="Menu">Menu</button>
+            <button id="mobile-pause-btn" class="mobile-drive-btn menu" type="button" data-action="pause" data-lang-zh="菜单" data-lang-en="Menu">Menu</button>
         </div>
     </div>
 
@@ -64,103 +65,105 @@
     <div id="minimap-controls" aria-label="Minimap view controls">
         <button id="minimap-orientation-btn" title="Minimap Orientation">N</button>
     </div>
-    <button id="show-minimap-btn">Map</button>
+    <button id="show-minimap-btn" data-lang-zh="地图" data-lang-en="Map">Map</button>
     
-    <button id="settings-button">Settings</button>
+    <button id="settings-button" data-lang-zh="设置" data-lang-en="Settings">Settings</button>
 
     <div id="startup-modal" class="modal-overlay">
         <div class="modal-content">
-            <h2 data-lang-zh="Welcome to Happy Drive" data-lang-en="Welcome to Happy Drive">Welcome to Happy Drive</h2>
+            <h2 data-lang-zh="欢迎来到快乐驾驶" data-lang-en="Welcome to Happy Drive">Welcome to Happy Drive</h2>
             <div class="settings-group">
-                <label for="initial-language-select" data-lang-zh="Language" data-lang-en="Language">Language</label>
+                <label for="initial-language-select" data-lang-zh="语言" data-lang-en="Language">Language</label>
                 <select id="initial-language-select">
+                    <option value="zh">中文</option>
                     <option value="en" selected>English</option>
                 </select>
             </div>
-            <p data-lang-zh="To get started, please enter your info:" data-lang-en="To get started, please enter your info:">To get started, please enter your info:</p>
-            <input type="text" id="nickname-input" data-lang-placeholder-zh="Enter your nickname" data-lang-placeholder-en="Enter your nickname">
+            <p data-lang-zh="开始前，请输入您的信息：" data-lang-en="To get started, please enter your info:">To get started, please enter your info:</p>
+            <input type="text" id="nickname-input" data-lang-placeholder-zh="请输入您的昵称" data-lang-placeholder-en="Enter your nickname">
             <select id="gender-select">
-                <option value="male" data-lang-zh="Male" data-lang-en="Male">Male</option>
-                <option value="female" data-lang-zh="Female" data-lang-en="Female">Female</option>
-                <option value="other" data-lang-zh="Other" data-lang-en="Other">Other</option>
+                <option value="male" data-lang-zh="男" data-lang-en="Male">Male</option>
+                <option value="female" data-lang-zh="女" data-lang-en="Female">Female</option>
+                <option value="other" data-lang-zh="其他" data-lang-en="Other">Other</option>
             </select>
-            <button id="start-game-btn" data-lang-zh="Start Game" data-lang-en="Start Game">Start Game</button>
+            <button id="start-game-btn" data-lang-zh="开始游戏" data-lang-en="Start Game">Start Game</button>
         </div>
     </div>
 
     <div id="main-menu-modal" class="modal-overlay" style="display: none;">
         <div class="modal-content">
             <h2 id="welcome-message"></h2>
-            <button id="free-mode-btn" data-lang-zh="Free Mode" data-lang-en="Free Mode">Free Mode</button>
-            <button id="custom-mode-btn" data-lang-zh="Custom Mode" data-lang-en="Custom Mode" disabled>Custom Mode</button>
-            <button id="editor-mode-btn" data-lang-zh="Map Editor" data-lang-en="Map Editor">Map Editor</button>
-            <button id="manual-btn" data-lang-zh="Manual" data-lang-en="Manual">Manual</button>
+            <button id="free-mode-btn" data-lang-zh="自由模式" data-lang-en="Free Mode">Free Mode</button>
+            <button id="custom-mode-btn" data-lang-zh="自定义模式" data-lang-en="Custom Mode" disabled>Custom Mode</button>
+            <button id="editor-mode-btn" data-lang-zh="地图编辑器" data-lang-en="Map Editor">Map Editor</button>
+            <button id="manual-btn" data-lang-zh="教程" data-lang-en="Manual">Manual</button>
             <div id="main-menu-info-box" class="menu-info-box"></div>
         </div>
     </div>
 
     <div id="manual-modal" class="modal-overlay" style="display: none;">
         <div class="modal-content manual-content">
-            <h2 data-lang-zh="Manual" data-lang-en="Manual">Manual</h2>
+            <h2 data-lang-zh="教程" data-lang-en="Manual">Manual</h2>
             <div class="manual-section">
-                <h3 data-lang-zh="Driving Gestures" data-lang-en="Driving Gestures">Driving Gestures</h3>
+                <h3 data-lang-zh="驾驶手势" data-lang-en="Driving Gestures">Driving Gestures</h3>
                 <ul>
-                    <li data-lang-zh="Swipe up on any empty game area to move forward." data-lang-en="Swipe up on any empty game area to move forward.">Swipe up on any empty game area to move forward.</li>
-                    <li data-lang-zh="Swipe left or right to turn." data-lang-en="Swipe left or right to turn.">Swipe left or right to turn.</li>
-                    <li data-lang-zh="Swipe down to move backward." data-lang-en="Swipe down to move backward.">Swipe down to move backward.</li>
-                    <li data-lang-zh="Tap Menu to pause, select a level, or reset." data-lang-en="Tap Menu to pause, select a level, or reset.">Tap Menu to pause, select a level, or reset.</li>
+                    <li data-lang-zh="在游戏空白区域上滑即可前进。" data-lang-en="Swipe up on any empty game area to move forward.">Swipe up on any empty game area to move forward.</li>
+                    <li data-lang-zh="向左或向右滑动即可转向。" data-lang-en="Swipe left or right to turn.">Swipe left or right to turn.</li>
+                    <li data-lang-zh="向下滑动即可后退。" data-lang-en="Swipe down to move backward.">Swipe down to move backward.</li>
+                    <li data-lang-zh="点击菜单可以暂停、选择关卡或重新开始。" data-lang-en="Tap Menu to pause, select a level, or restart the session.">Tap Menu to pause, select a level, or restart the session.</li>
                 </ul>
             </div>
             <div class="manual-section">
-                <h3 data-lang-zh="Map and Editor" data-lang-en="Map and Editor">Map and Editor</h3>
+                <h3 data-lang-zh="地图与编辑器" data-lang-en="Map and Editor">Map and Editor</h3>
                 <ul>
-                    <li data-lang-zh="Before driving, review the route on the large map." data-lang-en="Before driving, review the route on the large map.">Before driving, review the route on the large map.</li>
-                    <li data-lang-zh="In the editor, choose Wall, Path, Start, or Goal, then drag across the grid to draw." data-lang-en="In the editor, choose Wall, Path, Start, or Goal, then drag across the grid to draw.">In the editor, choose Wall, Path, Start, or Goal, then drag across the grid to draw.</li>
-                    <li data-lang-zh="After saving a custom map, play it from Custom Mode." data-lang-en="After saving a custom map, play it from Custom Mode.">After saving a custom map, play it from Custom Mode.</li>
+                    <li data-lang-zh="开始驾驶前，请先在大地图上查看路线。" data-lang-en="Before driving, review the route on the large map.">Before driving, review the route on the large map.</li>
+                    <li data-lang-zh="在编辑器中选择墙、道路、起点或终点，然后在网格上拖动绘制。" data-lang-en="In the editor, choose Wall, Path, Start, or Goal, then drag across the grid to draw.">In the editor, choose Wall, Path, Start, or Goal, then drag across the grid to draw.</li>
+                    <li data-lang-zh="保存自定义地图后，可以从自定义模式进入游玩。" data-lang-en="After saving a custom map, play it from Custom Mode.">After saving a custom map, play it from Custom Mode.</li>
                 </ul>
             </div>
-            <button id="close-manual-btn" data-lang-zh="Back" data-lang-en="Back">Back</button>
+            <button id="close-manual-btn" data-lang-zh="返回" data-lang-en="Back">Back</button>
         </div>
     </div>
     
     <div id="level-complete-modal" class="modal-overlay" style="display: none;">
         <div class="modal-content">
             <h2 id="results-title"></h2>
-            <button id="main-menu-btn" data-lang-zh="Main Menu" data-lang-en="Main Menu">Main Menu</button>
+            <button id="main-menu-btn" data-lang-zh="主菜单" data-lang-en="Main Menu">Main Menu</button>
         </div>
     </div>
 
     <div id="settings-panel" class="modal-overlay" style="display: none;">
         <div class="modal-content">
-            <h2 data-lang-zh="Settings" data-lang-en="Settings">Settings</h2>
+            <h2 data-lang-zh="设置" data-lang-en="Settings">Settings</h2>
             <div class="settings-group">
-                <label for="language-select" data-lang-zh="Language" data-lang-en="Language">Language</label>
+                <label for="language-select" data-lang-zh="语言" data-lang-en="Language">Language</label>
                 <select id="language-select">
+                    <option value="zh">中文</option>
                     <option value="en" selected>English</option>
                 </select>
             </div>
             <div class="settings-group">
-                <label for="font-size-slider" data-lang-zh="Font Size" data-lang-en="Font Size">Font Size</label>
+                <label for="font-size-slider" data-lang-zh="字体大小" data-lang-en="Font Size">Font Size</label>
                 <input type="range" id="font-size-slider" min="0.8" max="1.5" step="0.1" value="1">
             </div>
             <div class="settings-group">
-                <label for="minimap-size-slider" data-lang-zh="Minimap Size" data-lang-en="Minimap Size">Minimap Size</label>
+                <label for="minimap-size-slider" data-lang-zh="小地图大小" data-lang-en="Minimap Size">Minimap Size</label>
                 <input type="range" id="minimap-size-slider" min="1" max="2" step="0.01" value="2">
             </div>
             <div class="settings-group">
-                <label for="helper-text-toggle" data-lang-zh="Helper Text" data-lang-en="Helper Text">Helper Text</label>
+                <label for="helper-text-toggle" data-lang-zh="辅助文字" data-lang-en="Helper Text">Helper Text</label>
                 <select id="helper-text-toggle">
-                    <option value="on" data-lang-zh="On" data-lang-en="On">On</option>
-                    <option value="off" data-lang-zh="Off" data-lang-en="Off">Off</option>
+                    <option value="on" data-lang-zh="开启" data-lang-en="On">On</option>
+                    <option value="off" data-lang-zh="关闭" data-lang-en="Off">Off</option>
                 </select>
             </div>
             <div class="settings-group sound-settings-group">
-                <label for="sound-toggle" data-lang-zh="Sound" data-lang-en="Sound">Sound</label>
+                <label for="sound-toggle" data-lang-zh="音效" data-lang-en="Sound">Sound</label>
                 <select id="sound-toggle">
-                    <option value="on" data-lang-zh="On" data-lang-en="On">On</option>
-                    <option value="off" data-lang-zh="Off" data-lang-en="Off">Off</option>
+                    <option value="on" data-lang-zh="开启" data-lang-en="On">On</option>
+                    <option value="off" data-lang-zh="关闭" data-lang-en="Off">Off</option>
                 </select>
-                <label for="sound-volume-slider" data-lang-zh="Volume" data-lang-en="Volume">Volume</label>
+                <label for="sound-volume-slider" data-lang-zh="音量" data-lang-en="Volume">Volume</label>
                 <div class="range-with-value">
                     <input type="range" id="sound-volume-slider" min="0" max="1" step="0.01" value="1">
                     <output id="sound-volume-value" for="sound-volume-slider">100%</output>
@@ -168,92 +171,92 @@
             </div>
              
 <div class="settings-group">
-    <label for="arrow-1p-toggle" data-lang-zh="Yellow Arrows (1st Person)" data-lang-en="Yellow Arrows (1st Person)">Yellow Arrows (1st Person)</label>
+    <label for="arrow-1p-toggle" data-lang-zh="黄色箭头（第一人称）" data-lang-en="Yellow Arrows (1st Person)">Yellow Arrows (1st Person)</label>
     <select id="arrow-1p-toggle">
-        <option value="on" data-lang-zh="On" data-lang-en="On">On</option>
-        <option value="off" data-lang-zh="Off" data-lang-en="Off">Off</option>
+        <option value="on" data-lang-zh="开启" data-lang-en="On">On</option>
+        <option value="off" data-lang-zh="关闭" data-lang-en="Off">Off</option>
     </select>
 </div>
 <div class="settings-group">
-    <label for="arrow-3p-toggle" data-lang-zh="Yellow Arrows (3rd Person)" data-lang-en="Yellow Arrows (3rd Person)">Yellow Arrows (3rd Person)</label>
+    <label for="arrow-3p-toggle" data-lang-zh="黄色箭头（第三人称）" data-lang-en="Yellow Arrows (3rd Person)">Yellow Arrows (3rd Person)</label>
     <select id="arrow-3p-toggle">
-        <option value="on" data-lang-zh="On" data-lang-en="On">On</option>
-        <option value="off" data-lang-zh="Off" data-lang-en="Off">Off</option>
+        <option value="on" data-lang-zh="开启" data-lang-en="On">On</option>
+        <option value="off" data-lang-zh="关闭" data-lang-en="Off">Off</option>
     </select>
 </div>
             <div class="settings-group texture-settings-group">
-                <label data-lang-zh="Texture Settings" data-lang-en="Texture Settings">Texture Settings</label>
+                <label data-lang-zh="纹理设置" data-lang-en="Texture Settings">Texture Settings</label>
                 <div class="texture-input-row">
-                    <label for="floor-texture-input" data-lang-zh="Floor" data-lang-en="Floor">Floor</label>
+                    <label for="floor-texture-input" data-lang-zh="地面" data-lang-en="Floor">Floor</label>
                     <input type="file" id="floor-texture-input" accept="image/*">
                     <span class="texture-preview" id="floor-texture-preview"></span>
                 </div>
                 <div class="texture-input-row">
-                    <label for="wall-n-texture-input" data-lang-zh="North Wall (NS)" data-lang-en="North Wall (NS)">North Wall (NS)</label>
+                    <label for="wall-n-texture-input" data-lang-zh="北墙（南北向）" data-lang-en="North Wall (NS)">North Wall (NS)</label>
                     <input type="file" id="wall-n-texture-input" accept="image/*">
                     <span class="texture-preview" id="wall-n-texture-preview"></span>
                 </div>
                  <div class="texture-input-row">
-                    <label for="wall-s-texture-input" data-lang-zh="South Wall (NS)" data-lang-en="South Wall (NS)">South Wall (NS)</label>
+                    <label for="wall-s-texture-input" data-lang-zh="南墙（南北向）" data-lang-en="South Wall (NS)">South Wall (NS)</label>
                     <input type="file" id="wall-s-texture-input" accept="image/*">
                     <span class="texture-preview" id="wall-s-texture-preview"></span>
                 </div>
                 <div class="texture-input-row">
-                    <label for="wall-e-texture-input" data-lang-zh="East Wall (EW)" data-lang-en="East Wall (EW)">East Wall (EW)</label>
+                    <label for="wall-e-texture-input" data-lang-zh="东墙（东西向）" data-lang-en="East Wall (EW)">East Wall (EW)</label>
                     <input type="file" id="wall-e-texture-input" accept="image/*">
                     <span class="texture-preview" id="wall-e-texture-preview"></span>
                 </div>
                  <div class="texture-input-row">
-                    <label for="wall-w-texture-input" data-lang-zh="West Wall (EW)" data-lang-en="West Wall (EW)">West Wall (EW)</label>
+                    <label for="wall-w-texture-input" data-lang-zh="西墙（东西向）" data-lang-en="West Wall (EW)">West Wall (EW)</label>
                     <input type="file" id="wall-w-texture-input" accept="image/*">
                     <span class="texture-preview" id="wall-w-texture-preview"></span>
                 </div>
                 
-                <label for="floor-scale-slider" data-lang-zh="Floor Texture Size" data-lang-en="Floor Texture Size">Floor Texture Size</label>
+                <label for="floor-scale-slider" data-lang-zh="地面纹理大小" data-lang-en="Floor Texture Size">Floor Texture Size</label>
                 <input type="range" id="floor-scale-slider" min="1" max="10" step="1" value="1">
 
-                <label for="wall-scale-slider" data-lang-zh="Wall Texture Size" data-lang-en="Wall Texture Size">Wall Texture Size</label>
+                <label for="wall-scale-slider" data-lang-zh="墙面纹理大小" data-lang-en="Wall Texture Size">Wall Texture Size</label>
                 <input type="range" id="wall-scale-slider" min="1" max="10" step="1" value="1">
-                 <button id="reset-textures-btn" class="secondary" data-lang-zh="Reset Textures" data-lang-en="Reset Textures">Reset Textures</button>
+                 <button id="reset-textures-btn" class="secondary" data-lang-zh="恢复默认纹理" data-lang-en="Reset Textures">Reset Textures</button>
             </div>
-            <button id="close-settings-btn" data-lang-zh="Close" data-lang-en="Close">Close</button>
+            <button id="close-settings-btn" data-lang-zh="关闭" data-lang-en="Close">Close</button>
         </div>
     </div>
 
     <div id="pause-menu-modal" class="modal-overlay" style="display: none;">
         <div class="modal-content">
-            <h2 data-lang-zh="Pause Menu" data-lang-en="Pause Menu">Pause Menu</h2>
-            <button id="resume-game-btn" data-lang-zh="Resume Game" data-lang-en="Resume Game">Resume Game</button>
-            <button id="level-select-btn" data-lang-zh="Select Level" data-lang-en="Select Level">Select Level</button>
-            <button id="reset-game-btn" data-lang-zh="Reset Game" data-lang-en="Reset Game">Reset Game</button>
-            <button id="pause-to-main-menu-btn" data-lang-zh="Main Menu" data-lang-en="Main Menu">Main Menu</button>
+            <h2 data-lang-zh="暂停菜单" data-lang-en="Pause Menu">Pause Menu</h2>
+            <button id="resume-game-btn" data-lang-zh="继续游戏" data-lang-en="Resume Game">Resume Game</button>
+            <button id="level-select-btn" data-lang-zh="选择关卡" data-lang-en="Select Level">Select Level</button>
+            <button id="reset-game-btn" data-lang-zh="重新开始" data-lang-en="Restart Session">Restart Session</button>
+            <button id="pause-to-main-menu-btn" data-lang-zh="主菜单" data-lang-en="Main Menu">Main Menu</button>
         </div>
     </div>
 
     <div id="level-select-modal" class="modal-overlay" style="display: none;">
         <div class="modal-content">
-            <h2 data-lang-zh="Select Level" data-lang-en="Select Level">Select Level</h2>
+            <h2 data-lang-zh="选择关卡" data-lang-en="Select Level">Select Level</h2>
             <div id="level-select-grid" class="level-select-grid"></div>
-            <button id="close-level-select-btn" data-lang-zh="Back" data-lang-en="Back">Back</button>
+            <button id="close-level-select-btn" data-lang-zh="返回" data-lang-en="Back">Back</button>
         </div>
     </div>
 
     <div id="free-mode-level-select-modal" class="modal-overlay" style="display: none;">
         <div class="modal-content">
-            <h2 data-lang-zh="Free Mode - Select Level" data-lang-en="Free Mode - Select Level">Free Mode - Select Level</h2>
+            <h2 data-lang-zh="自由模式 - 选择关卡" data-lang-en="Free Mode - Select Level">Free Mode - Select Level</h2>
             <div id="free-mode-level-select-grid" class="level-select-grid"></div>
-            <button id="free-mode-level-select-back-btn" data-lang-zh="Back to Menu" data-lang-en="Back to Menu">Back to Menu</button>
+            <button id="free-mode-level-select-back-btn" data-lang-zh="返回菜单" data-lang-en="Back to Menu">Back to Menu</button>
         </div>
     </div>
     
     <div id="editor-modal" class="modal-overlay" style="display: none;">
         <div class="modal-content">
-            <h2 data-lang-zh="Map Editor" data-lang-en="Map Editor">Map Editor</h2>
+            <h2 data-lang-zh="地图编辑器" data-lang-en="Map Editor">Map Editor</h2>
             <div id="editor-toolbar">
                 <div class="editor-row">
                     <div id="editor-mode-selector">
-                        <button id="editor-mode-custom-btn" class="selected" data-lang-zh="Custom" data-lang-en="Custom">Custom</button>
-                        <button id="editor-mode-builtin-btn" data-lang-zh="Built-in" data-lang-en="Built-in">Built-in</button>
+                        <button id="editor-mode-custom-btn" class="selected" data-lang-zh="自定义" data-lang-en="Custom">Custom</button>
+                        <button id="editor-mode-builtin-btn" data-lang-zh="内置" data-lang-en="Built-in">Built-in</button>
                     </div>
                     <div id="editor-map-selector">
                         <select id="editor-slot-select"></select>
@@ -261,44 +264,44 @@
                     </div>
                 </div>
                 <div class="editor-row" id="editor-tools">
-                    <button id="tool-wall" data-tool="wall" data-lang-zh="Wall" data-lang-en="Wall" class="selected">Wall</button>
-                    <button id="tool-path" data-tool="path" data-lang-zh="Path" data-lang-en="Path">Path</button>
-                    <button id="tool-start" data-tool="start" data-lang-zh="Start" data-lang-en="Start">Start</button>
-                    <button id="tool-goal" data-tool="goal" data-lang-zh="Goal" data-lang-en="Goal">Goal</button>
-                    <button id="tool-waypoint" data-tool="waypoint" data-lang-zh="Waypoint" data-lang-en="Waypoint">💎</button>
-                    <button id="tool-free-waypoint" data-tool="free-waypoint" data-lang-zh="Free Mark" data-lang-en="Free Mark">★</button>
-                    <button id="tool-highlight-floor" data-tool="highlight-floor" data-lang-zh="Highlight Floor" data-lang-en="Highlight Floor">✨</button>
+                    <button id="tool-wall" data-tool="wall" data-lang-zh="墙" data-lang-en="Wall" class="selected">Wall</button>
+                    <button id="tool-path" data-tool="path" data-lang-zh="路" data-lang-en="Path">Path</button>
+                    <button id="tool-start" data-tool="start" data-lang-zh="起点" data-lang-en="Start">Start</button>
+                    <button id="tool-goal" data-tool="goal" data-lang-zh="终点" data-lang-en="Goal">Goal</button>
+                    <button id="tool-waypoint" data-tool="waypoint" data-lang-zh="数字路标" data-lang-en="Waypoint">💎</button>
+                    <button id="tool-free-waypoint" data-tool="free-waypoint" data-lang-zh="自由路标" data-lang-en="Free Mark">★</button>
+                    <button id="tool-highlight-floor" data-tool="highlight-floor" data-lang-zh="高亮地板" data-lang-en="Highlight Floor">✨</button>
                 </div>
                 <div class="editor-row" id="editor-options">
                     <label>
-                        <span data-lang-zh="Waypoint Mode" data-lang-en="Waypoint Mode">Waypoint Mode</span>
+                        <span data-lang-zh="路标模式" data-lang-en="Waypoint Mode">Waypoint Mode</span>
                         <input type="checkbox" id="editor-waypoint-mode-toggle">
                     </label>
                     <label>
-                        <span data-lang-zh="Waypoint Color" data-lang-en="Waypoint Color">Waypoint Color</span>
+                        <span data-lang-zh="路标颜色" data-lang-en="Waypoint Color">Waypoint Color</span>
                         <input type="color" id="editor-waypoint-color" value="#8A2BE2">
                     </label>
                     <label>
-                        <span data-lang-zh="Free Mark Figure" data-lang-en="Free Mark Figure">Free Mark Figure</span>
+                        <span data-lang-zh="自由路标形象" data-lang-en="Free Mark Figure">Free Mark Figure</span>
                         <select id="editor-free-waypoint-variant">
-                            <option value="classic" data-lang-zh="Classic Star" data-lang-en="Classic Star">Classic Star</option>
-                            <option value="frieza" data-lang-zh="Saluting Figure" data-lang-en="Saluting Figure">Saluting Figure</option>
+                            <option value="classic" data-lang-zh="经典星标" data-lang-en="Classic Star">Classic Star</option>
+                            <option value="frieza" data-lang-zh="敬礼角色" data-lang-en="Saluting Figure">Saluting Figure</option>
                         </select>
                     </label>
                 </div>
                 <div class="editor-row" id="editor-asset-size-controls">
                     <label class="editor-size-control" for="editor-goal-size-slider">
-                        <span data-lang-zh="Goal Size" data-lang-en="Goal Size">Goal Size</span>
+                        <span data-lang-zh="终点大小" data-lang-en="Goal Size">Goal Size</span>
                         <input type="range" id="editor-goal-size-slider" min="0.5" max="1.8" step="0.05" value="1">
                         <output id="editor-goal-size-value" for="editor-goal-size-slider">100%</output>
                     </label>
                     <label class="editor-size-control" for="editor-waypoint-size-slider">
-                        <span data-lang-zh="Numbered Waypoint Size" data-lang-en="Numbered Waypoint Size">Numbered Waypoint Size</span>
+                        <span data-lang-zh="数字路标大小" data-lang-en="Numbered Waypoint Size">Numbered Waypoint Size</span>
                         <input type="range" id="editor-waypoint-size-slider" min="0.5" max="1.8" step="0.05" value="1">
                         <output id="editor-waypoint-size-value" for="editor-waypoint-size-slider">100%</output>
                     </label>
                     <label class="editor-size-control" for="editor-free-waypoint-size-slider">
-                        <span data-lang-zh="Free Mark Size" data-lang-en="Free Mark Size">Free Mark Size</span>
+                        <span data-lang-zh="自由路标大小" data-lang-en="Free Mark Size">Free Mark Size</span>
                         <input type="range" id="editor-free-waypoint-size-slider" min="0.5" max="1.8" step="0.05" value="1">
                         <output id="editor-free-waypoint-size-value" for="editor-free-waypoint-size-slider">100%</output>
                     </label>
@@ -306,73 +309,74 @@
             </div>
             <div id="editor-grid"></div>
             <p id="editor-message" style="color: red; min-height: 1.2em;"></p>
-            <button id="editor-save-btn" data-lang-zh="Save Map" data-lang-en="Save Map" data-lang-zh-alt="Save as Custom" data-lang-en-alt="Save as Custom">Save Map</button>
-            <button id="editor-delete-btn" data-lang-zh="Delete Map" data-lang-en="Delete Map" class="danger">Delete Map</button>
-            <button id="editor-back-btn" data-lang-zh="Back to Menu" data-lang-en="Back to Menu">Back to Menu</button>
+            <button id="editor-save-btn" data-lang-zh="保存地图" data-lang-en="Save Map" data-lang-zh-alt="另存为自定义" data-lang-en-alt="Save as Custom">Save Map</button>
+            <button id="editor-delete-btn" data-lang-zh="删除地图" data-lang-en="Delete Map" class="danger">Delete Map</button>
+            <button id="editor-back-btn" data-lang-zh="返回菜单" data-lang-en="Back to Menu">Back to Menu</button>
         </div>
     </div>
     
     <div id="custom-maps-modal" class="modal-overlay" style="display: none;">
         <div class="modal-content">
-            <h2 data-lang-zh="Custom Maps" data-lang-en="Custom Maps">Custom Maps</h2>
+            <h2 data-lang-zh="自定义地图" data-lang-en="Custom Maps">Custom Maps</h2>
             <div id="custom-maps-grid"></div>
-            <p data-lang-zh="Select a map to continue." data-lang-en="Select a map to continue.">Select a map to continue.</p>
-            <button id="custom-play-btn" data-lang-zh="Play" data-lang-en="Play" disabled>Play</button>
-            <button id="custom-edit-btn" data-lang-zh="Edit" data-lang-en="Edit" disabled>Edit</button>
-            <button id="custom-delete-btn" data-lang-zh="Delete" data-lang-en="Delete" disabled class="danger">Delete</button>
-            <button id="custom-back-btn" data-lang-zh="Back to Menu" data-lang-en="Back to Menu">Back to Menu</button>
+            <p data-lang-zh="请选择一张地图继续。" data-lang-en="Select a map to continue.">Select a map to continue.</p>
+            <p id="custom-maps-message" role="status" style="color: red; min-height: 1.2em;"></p>
+            <button id="custom-play-btn" data-lang-zh="游玩" data-lang-en="Play" disabled>Play</button>
+            <button id="custom-edit-btn" data-lang-zh="编辑" data-lang-en="Edit" disabled>Edit</button>
+            <button id="custom-delete-btn" data-lang-zh="删除" data-lang-en="Delete" disabled class="danger">Delete</button>
+            <button id="custom-back-btn" data-lang-zh="返回菜单" data-lang-en="Back to Menu">Back to Menu</button>
         </div>
     </div>
 
     <div id="big-map-view-modal" class="modal-overlay" style="display: none;">
         <div class="big-map-flex-container">
             <div id="map-instructions-panel" class="modal-content" style="width: auto; max-width: 350px; text-align: left; padding: 30px;">
-                <h3 id="map-instructions-title" data-lang-zh="Map Instructions" data-lang-en="Map Instructions">Map Instructions</h3>
+                <h3 id="map-instructions-title" data-lang-zh="地图说明" data-lang-en="Map Instructions">Map Instructions</h3>
                 <ul>
                     <li>
                         <svg class="legend-icon" viewBox="0 0 24 24" aria-label="Your position arrow"><defs><radialGradient id="legendPlayerGrad" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#ff8080"/><stop offset="100%" stop-color="#c00000"/></radialGradient></defs><path d="M4 12 L16 4 L16 9 L21 9 L21 15 L16 15 L16 20 Z" fill="url(#legendPlayerGrad)" stroke="#006400" stroke-width="2" stroke-linejoin="round"/></svg>
-                        <span data-lang-zh="Your Position (Red Arrow)" data-lang-en="Your Position (Red Arrow)">Your Position (Red Arrow)</span>
+                        <span data-lang-zh="你的位置（红色箭头）" data-lang-en="Your Position (Red Arrow)">Your Position (Red Arrow)</span>
                     </li>
                     <li>
                         <span class="map-legend-swatch swatch-start"></span>
-                        <span data-lang-zh="Start Point (Blue Square)" data-lang-en="Start Point (Blue Square)">Start Point (Blue Square)</span>
+                        <span data-lang-zh="起点（蓝色方块）" data-lang-en="Start Point (Blue Square)">Start Point (Blue Square)</span>
                     </li>
                     <li>
                         <span class="map-legend-swatch swatch-goal"></span>
-                        <span data-lang-zh="Goal (Red Square)" data-lang-en="Goal (Red Square)">Goal (Red Square)</span>
+                        <span data-lang-zh="终点（红色方块）" data-lang-en="Goal (Red Square)">Goal (Red Square)</span>
                     </li>
                     <li>
                         <span class="map-legend-swatch swatch-waypoint"></span>
-                        <span data-lang-zh="Waypoint (Purple Diamond)" data-lang-en="Waypoint (Purple Diamond)">Waypoint (Purple Diamond)</span>
+                        <span data-lang-zh="数字路标（紫色宝石）" data-lang-en="Waypoint (Purple Diamond)">Waypoint (Purple Diamond)</span>
                     </li>
                     <li>
                         <span class="map-legend-swatch swatch-free-waypoint"></span>
-                        <span data-lang-zh="Free Mark (Blue Star, any order)" data-lang-en="Free Mark (Blue Star, any order)">Free Mark (Blue Star, any order)</span>
+                        <span data-lang-zh="自由路标（蓝色星标，任意顺序）" data-lang-en="Free Mark (Blue Star, any order)">Free Mark (Blue Star, any order)</span>
                     </li>
                     <li>
                         <span class="map-legend-swatch swatch-highlight-floor"></span>
-                        <span data-lang-zh="Highlight Floor (Yellow Square)" data-lang-en="Highlight Floor (Yellow Square)">Highlight Floor (Yellow Square)</span>
+                        <span data-lang-zh="高亮地板（黄色方块）" data-lang-en="Highlight Floor (Yellow Square)">Highlight Floor (Yellow Square)</span>
                     </li>
                 </ul>
-                <p class="instruction-text" data-lang-zh="Review the route first. When ready, tap Start Driving or the map." data-lang-en="Review the route first. When ready, tap Start Driving or the map.">Review the route first. When ready, tap Start Driving or the map.</p>
+                <p class="instruction-text" data-lang-zh="请先查看路线。准备好后，点击开始驾驶或点击地图。" data-lang-en="Review the route first. When ready, tap Start Driving or the map.">Review the route first. When ready, tap Start Driving or the map.</p>
                 <div id="player-avatar-select" class="player-avatar-select">
-                    <h4 data-lang-zh="Choose Player" data-lang-en="Choose Player">Choose Player</h4>
+                    <h4 data-lang-zh="选择玩家形象" data-lang-en="Choose Player">Choose Player</h4>
                     <div class="vehicle-choice-grid" role="radiogroup" aria-label="Player avatar">
                         <button type="button" class="vehicle-choice-btn active" data-player-vehicle="dragon-cart" role="radio" aria-checked="true">
                             <img class="vehicle-choice-preview" src="./src/assets/vehicle-thumbnails/dragon-cart-front.png?v=20260625-model-fix" alt="" loading="eager" decoding="async">
-                            <span data-lang-zh="Dragon Cart" data-lang-en="Dragon Cart">Dragon Cart</span>
+                            <span data-lang-zh="龙车" data-lang-en="Dragon Cart">Dragon Cart</span>
                         </button>
                         <button type="button" class="vehicle-choice-btn" data-player-vehicle="vintage-classic" role="radio" aria-checked="false">
                             <img class="vehicle-choice-preview" src="./src/assets/vehicle-thumbnails/vintage-classic-front.png?v=20260625-model-fix" alt="" loading="eager" decoding="async">
-                            <span data-lang-zh="Classic Car" data-lang-en="Classic Car">Classic Car</span>
+                            <span data-lang-zh="经典车" data-lang-en="Classic Car">Classic Car</span>
                         </button>
                         <button type="button" class="vehicle-choice-btn" data-player-vehicle="vintage-car" role="radio" aria-checked="false">
                             <img class="vehicle-choice-preview" src="./src/assets/vehicle-thumbnails/vintage-car-front.png?v=20260625-model-fix" alt="" loading="eager" decoding="async">
-                            <span data-lang-zh="Vintage Car" data-lang-en="Vintage Car">Vintage Car</span>
+                            <span data-lang-zh="复古车" data-lang-en="Vintage Car">Vintage Car</span>
                         </button>
                     </div>
                 </div>
-                <button id="start-driving-btn" type="button" data-lang-zh="Start Driving" data-lang-en="Start Driving">Start Driving</button>
+                <button id="start-driving-btn" type="button" data-lang-zh="开始驾驶" data-lang-en="Start Driving">Start Driving</button>
             </div>
             <div id="big-map-container-wrapper">
                 </div>
@@ -381,18 +385,18 @@
     
     <div id="confirm-reset-modal" class="modal-overlay" style="display: none;">
         <div class="modal-content">
-            <h2 data-lang-zh="Confirm Reset" data-lang-en="Confirm Reset">Confirm Reset</h2>
-            <p data-lang-zh="Are you sure you want to reset all game data? This action cannot be undone." data-lang-en="Are you sure you want to reset all game data? This action cannot be undone.">Are you sure you want to reset all game data? This action cannot be undone.</p>
+            <h2 data-lang-zh="确认重新开始" data-lang-en="Confirm Restart">Confirm Restart</h2>
+            <p data-lang-zh="确定要返回欢迎页面吗？已保存的地图和设置会保留。" data-lang-en="Return to the welcome screen? Saved maps and settings will be kept.">Return to the welcome screen? Saved maps and settings will be kept.</p>
             <div class="button-row">
-                <button id="confirm-reset-btn" class="danger" data-lang-zh="Confirm" data-lang-en="Confirm">Confirm</button>
-                <button id="cancel-reset-btn" class="secondary" data-lang-zh="Cancel" data-lang-en="Cancel">Cancel</button>
+                <button id="confirm-reset-btn" class="danger" data-lang-zh="确认" data-lang-en="Confirm">Confirm</button>
+                <button id="cancel-reset-btn" class="secondary" data-lang-zh="取消" data-lang-en="Cancel">Cancel</button>
             </div>
         </div>
     </div>
 
 
     <div id="dev-panel">
-        <h4 data-lang-zh="Quick Level Select" data-lang-en="Quick Level Select">Quick Level Select</h4>
+        <h4 data-lang-zh="关卡快速切换" data-lang-en="Quick Level Select">Quick Level Select</h4>
         <select id="level-select"></select>
     </div>
 
@@ -404,6 +408,6 @@
             }
         }
     </script>
-    <script type="module" src="./src/js/main.js?v=20260706-english-v1"></script>
+    <script type="module" src="./src/js/main.js?v=20260817-bilingual-v5"></script>
 </body>
 </html>

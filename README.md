@@ -9,6 +9,7 @@ https://novaz001-sar.github.io/drive20-mobile/
 ## Mobile-Focused Features
 
 - Gesture-based driving on any empty game area.
+- Built-in Chinese and English interfaces with a remembered language choice.
 - Large touch targets and readable interface text for tablet and phone users.
 - First-person and third-person camera modes, including adjustable third-person controls.
 - Minimap options for fixed and rotating views.

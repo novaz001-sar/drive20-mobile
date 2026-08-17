@@ -48,7 +48,7 @@ let thirdPersonControls = {
     angle: 45, // Corresponds to slider initial value
     carScale: 1.0, // NEW: Add car scale control
     cameraMode: 'follow',
-    panelExpanded: true
+    panelExpanded: !(window.matchMedia('(pointer: coarse)').matches || window.innerWidth <= 900)
 };
 
 let currentLevelState = {
@@ -96,9 +96,15 @@ let customLevels = [];
 let luckyCatArm, luckyCatWrist, floatingHeart;
 let helveticaFont = null;
 
-let currentLanguage = 'en';
+const LANGUAGE_STORAGE_KEY = 'drive_language_v1';
+let currentLanguage = getInitialLanguage();
 let promptTimeout;
 let hintTimeout;
+let appViewportResizeObserver = null;
+let rendererViewportWidth = 0;
+let rendererViewportHeight = 0;
+let rendererPixelRatio = 0;
+let lastViewportValidationTime = 0;
 let currentEditorMode = 'custom';
 const DEFAULT_FLOOR_TEXTURE_URL = './src/assets/floor-cell-mobile-512.webp?v=20260620-4';
 const FALLBACK_FLOOR_TEXTURE_URL = './src/assets/floor-cell.png?v=20260620-4';
@@ -209,8 +215,52 @@ const playerVehicleCenter = new THREE.Vector3();
 const AUDIO_MASTER_GAIN_MULTIPLIER = 2;
 const SOUND_ENABLED_STORAGE_KEY = 'drive_sound_enabled_v1';
 const SOUND_VOLUME_STORAGE_KEY = 'drive_sound_volume_v2';
+const CUSTOM_LEVELS_STORAGE_KEY = 'customMazeLevels_v2';
 
 THREE.Cache.enabled = true;
+
+function isSupportedLanguage(value) {
+    return Boolean(value && translations[value]);
+}
+
+function getInitialLanguage() {
+    try {
+        const savedLanguage = localStorage.getItem(LANGUAGE_STORAGE_KEY);
+        if (isSupportedLanguage(savedLanguage)) return savedLanguage;
+    } catch (e) {
+        // Language storage is optional.
+    }
+
+    const browserLanguage = typeof navigator !== 'undefined'
+        ? `${navigator.language || navigator.userLanguage || ''}`.toLowerCase()
+        : '';
+    return browserLanguage.startsWith('zh') ? 'zh' : 'en';
+}
+
+function saveLanguagePreference() {
+    try {
+        localStorage.setItem(LANGUAGE_STORAGE_KEY, currentLanguage);
+    } catch (e) {
+        // Ignore storage failures; the active session still switches language.
+    }
+}
+
+function syncLanguageControls() {
+    const htmlLang = currentLanguage === 'zh' ? 'zh-CN' : 'en';
+    document.documentElement.lang = htmlLang;
+
+    const initialLanguageSelect = document.getElementById('initial-language-select');
+    const languageSelect = document.getElementById('language-select');
+    if (initialLanguageSelect) initialLanguageSelect.value = currentLanguage;
+    if (languageSelect) languageSelect.value = currentLanguage;
+}
+
+function setCurrentLanguage(language, { save = true } = {}) {
+    currentLanguage = isSupportedLanguage(language) ? language : 'en';
+    if (save) saveLanguagePreference();
+    syncLanguageControls();
+    updateUIText();
+}
 
 function readStoredPlayerVehicleId() {
     try {
@@ -342,10 +392,24 @@ function syncAppViewportSize() {
 function syncRendererToViewport() {
     const { width, height } = syncAppViewportSize();
     if (!camera || !renderer) return;
+    const pixelRatio = getRendererPixelRatio();
     camera.aspect = width / height;
     camera.updateProjectionMatrix();
-    renderer.setPixelRatio(getRendererPixelRatio());
+    renderer.setPixelRatio(pixelRatio);
     renderer.setSize(width, height);
+    rendererViewportWidth = width;
+    rendererViewportHeight = height;
+    rendererPixelRatio = pixelRatio;
+}
+
+function validateRendererViewport(elapsedTime) {
+    if (elapsedTime - lastViewportValidationTime < 0.25) return;
+    lastViewportValidationTime = elapsedTime;
+    const { width, height } = getAppViewportSize();
+    const pixelRatio = getRendererPixelRatio();
+    if (width !== rendererViewportWidth || height !== rendererViewportHeight || pixelRatio !== rendererPixelRatio) {
+        syncRendererToViewport();
+    }
 }
 
 function scheduleInitialViewportSync() {
@@ -481,11 +545,16 @@ async function init() {
     window.addEventListener('resize', onWindowResize, false);
     window.visualViewport?.addEventListener('resize', onWindowResize, false);
     window.visualViewport?.addEventListener('scroll', onWindowResize, false);
+    if (typeof ResizeObserver !== 'undefined') {
+        appViewportResizeObserver = new ResizeObserver(() => syncRendererToViewport());
+        appViewportResizeObserver.observe(document.documentElement);
+    }
     scheduleInitialViewportSync();
     document.addEventListener('keydown', onKeyDown);
     document.addEventListener('keyup', onKeyUp);
     
     setupUI();
+    setupDevPanel();
     updateUIText();
     createStarField();
     animate();
@@ -925,19 +994,18 @@ function setupGestureControls() {
 
 function setupUI() {
     setupAudioUnlockListeners();
+    syncLanguageControls();
     document.getElementById('settings-button')?.addEventListener('click', openSettingsPanel);
     document.getElementById('close-settings-btn')?.addEventListener('click', closeSettingsPanel);
 
     document.getElementById('initial-language-select').addEventListener('change', (e) => {
-        currentLanguage = e.target.value;
-        updateUIText();
+        setCurrentLanguage(e.target.value);
     });
 
     document.getElementById('start-game-btn').addEventListener('click', () => {
-        currentLanguage = document.getElementById('initial-language-select').value;
-        document.getElementById('language-select').value = currentLanguage;
+        setCurrentLanguage(document.getElementById('initial-language-select').value);
         const nickname = document.getElementById('nickname-input').value.trim();
-        playerInfo.nickname = nickname || 'Driver';
+        playerInfo.nickname = nickname || translations[currentLanguage].driverFallback;
         playerInfo.gender = document.getElementById('gender-select').value;
         document.getElementById('startup-modal').style.display = 'none';
         document.getElementById('main-menu-modal').style.display = 'flex';
@@ -1136,9 +1204,7 @@ soundVolumeSlider?.addEventListener('input', (e) => {
         document.documentElement.style.setProperty('--minimap-scale', e.target.value);
     });
     document.getElementById('language-select').addEventListener('change', (e) => {
-        currentLanguage = e.target.value;
-        document.getElementById('initial-language-select').value = currentLanguage;
-        updateUIText();
+        setCurrentLanguage(e.target.value);
     });
     
     document.getElementById('resume-game-btn').addEventListener('click', togglePauseMenu);
@@ -1276,7 +1342,7 @@ function setupDevPanel() {
     levels.forEach((_, index) => {
         const option = document.createElement('option');
         option.value = index;
-        option.textContent = `${translations[currentLanguage].level} ${index + 1}`;
+        option.textContent = getLevelLabel(index);
         select.appendChild(option);
     });
     select.addEventListener('change', (e) => {
@@ -1712,7 +1778,7 @@ if (isWaypointNext) {
 function showLevelComplete() {
     const modal = document.getElementById('level-complete-modal');
     const lang = translations[currentLanguage];
-    const nickname = playerInfo.nickname || 'Driver';
+    const nickname = playerInfo.nickname || lang.driverFallback;
     
     document.getElementById('results-title').textContent = lang.levelCompleteWithName
         ? lang.levelCompleteWithName(nickname)
@@ -1730,6 +1796,7 @@ function animate() {
     if(gameState === 'PAUSED') return;
     const delta = clock.getDelta();
     const elapsedTime = clock.getElapsedTime();
+    validateRendererViewport(elapsedTime);
     
     // Day/Night Cycle (Visuals update)
     const dayNightCycle = (Math.sin(elapsedTime * (0.1 / 3)) + 1) / 2;
@@ -3856,7 +3923,61 @@ function updateHUD() {
     }
 }
 
+function getCustomSlotLabel(index) {
+    const slotNumber = index + 1;
+    const baseLabel = `${translations[currentLanguage].map_slot} ${slotNumber}`;
+    return customLevels[index] ? baseLabel : `${baseLabel} (${translations[currentLanguage].empty_slot})`;
+}
+
+function getLevelLabel(index) {
+    return `${translations[currentLanguage].level} ${index + 1}`;
+}
+
+function refreshDevLevelSelectLabels() {
+    const select = document.getElementById('level-select');
+    if (!select) return;
+    Array.from(select.options).forEach((option, index) => {
+        option.textContent = getLevelLabel(index);
+    });
+}
+
+function refreshEditorSelectLabels() {
+    const slotSelect = document.getElementById('editor-slot-select');
+    if (slotSelect) {
+        Array.from(slotSelect.options).forEach((option, index) => {
+            option.textContent = getCustomSlotLabel(index);
+        });
+    }
+
+    const builtinLevelSelect = document.getElementById('editor-builtin-level-select');
+    if (builtinLevelSelect) {
+        Array.from(builtinLevelSelect.options).forEach((option, index) => {
+            option.textContent = getLevelLabel(index);
+        });
+    }
+}
+
+function refreshCustomMapButtonLabels() {
+    const customMapsModal = document.getElementById('custom-maps-modal');
+    if (!customMapsModal || customMapsModal.style.display !== 'flex') return;
+
+    document.querySelectorAll('#custom-maps-grid button').forEach((button) => {
+        const index = parseInt(button.dataset.index, 10);
+        if (!Number.isFinite(index)) return;
+        button.textContent = customLevels[index]
+            ? `${translations[currentLanguage].map_slot} ${index + 1}`
+            : `${index + 1} (${translations[currentLanguage].empty_slot})`;
+    });
+}
+
+function refreshDynamicLanguageUI() {
+    refreshDevLevelSelectLabels();
+    refreshEditorSelectLabels();
+    refreshCustomMapButtonLabels();
+}
+
 function updateUIText() {
+    syncLanguageControls();
     document.querySelectorAll('[data-lang-zh]').forEach(el => {
         const key = currentLanguage === 'zh' ? 'langZh' : 'langEn';
         // Handle alt text for save button
@@ -3882,6 +4003,7 @@ function updateUIText() {
     if (document.getElementById('ingame-hint').style.display !== 'none') showIngameHint();
     updateMinimapOrientationButton();
     updateHUD();
+    refreshDynamicLanguageUI();
 }
 
 function togglePauseMenu() {
@@ -3916,7 +4038,7 @@ function showLevelSelectModal() {
 }
 
 function resetGame() {
-    playerInfo = { nickname: 'Driver', gender: 'other' };
+    playerInfo = { nickname: translations[currentLanguage].driverFallback, gender: 'other' };
     document.getElementById('nickname-input').value = '';
     document.querySelectorAll('.modal-overlay').forEach(m => m.style.display = 'none');
     document.getElementById('startup-modal').style.display = 'flex';
@@ -3939,16 +4061,49 @@ const MAX_CUSTOM_LEVELS = 15;
 
 function loadCustomLevels() {
     try {
-        const savedLevels = localStorage.getItem('customMazeLevels_v2');
-        customLevels = savedLevels ? JSON.parse(savedLevels) : new Array(MAX_CUSTOM_LEVELS).fill(null);
+        const savedLevels = localStorage.getItem(CUSTOM_LEVELS_STORAGE_KEY);
+        const parsedLevels = savedLevels ? JSON.parse(savedLevels) : [];
+        customLevels = normalizeCustomLevels(parsedLevels);
     } catch (e) {
         console.error("Failed to load custom levels:", e);
-        customLevels = new Array(MAX_CUSTOM_LEVELS).fill(null);
+        customLevels = createEmptyCustomLevels();
     }
 }
 
+function createEmptyCustomLevels() {
+    return new Array(MAX_CUSTOM_LEVELS).fill(null);
+}
+
+function isValidStoredCustomLevel(level) {
+    if (!level || !Array.isArray(level.grid) || level.grid.length === 0) return false;
+    const width = level.grid[0]?.length || 0;
+    if (width === 0 || !level.grid.every((row) => Array.isArray(row) && row.length === width)) return false;
+
+    const isValidPoint = (point) => (
+        Number.isInteger(point?.x) && Number.isInteger(point?.z)
+        && point.x >= 0 && point.x < width
+        && point.z >= 0 && point.z < level.grid.length
+    );
+    return isValidPoint(level.start) && isValidPoint(level.goal);
+}
+
+function normalizeCustomLevels(levelsToNormalize) {
+    const normalized = createEmptyCustomLevels();
+    if (!Array.isArray(levelsToNormalize)) return normalized;
+    levelsToNormalize.slice(0, MAX_CUSTOM_LEVELS).forEach((level, index) => {
+        normalized[index] = isValidStoredCustomLevel(level) ? level : null;
+    });
+    return normalized;
+}
+
 function saveCustomLevels() {
-    localStorage.setItem('customMazeLevels_v2', JSON.stringify(customLevels));
+    try {
+        localStorage.setItem(CUSTOM_LEVELS_STORAGE_KEY, JSON.stringify(customLevels));
+        return true;
+    } catch (e) {
+        console.warn("Failed to save custom levels:", e);
+        return false;
+    }
 }
 
 function getEditorAssetSizeControls() {
@@ -4004,7 +4159,7 @@ function initEditor(slotIndex = 0) {
     for (let i = 0; i < MAX_CUSTOM_LEVELS; i++) {
         const option = document.createElement('option');
         option.value = i;
-        option.textContent = `${translations[currentLanguage].map_slot} ${i+1}` + (customLevels[i] ? '' : ` (${translations[currentLanguage].empty_slot})`);
+        option.textContent = getCustomSlotLabel(i);
         slotSelect.appendChild(option);
     }
     slotSelect.value = slotIndex;
@@ -4014,7 +4169,7 @@ function initEditor(slotIndex = 0) {
     levels.forEach((_, index) => {
         const option = document.createElement('option');
         option.value = index;
-        option.textContent = `${translations[currentLanguage].level} ${index+1}`;
+        option.textContent = getLevelLabel(index);
         builtinLevelSelect.appendChild(option);
     });
     builtinLevelSelect.onchange = () => loadEditorGrid(parseInt(builtinLevelSelect.value), 'builtin');
@@ -4090,6 +4245,9 @@ function loadEditorGrid(index, mode) {
     document.getElementById('tool-wall').classList.add('selected');
 
     let sourceGrid, sourceStart, sourceGoal, sourceWidth, sourceHeight;
+    let sourceWaypoints = [];
+    let sourceFreeWaypoints = [];
+    let sourceHighlightFloors = [];
     if (levelToLoad) {
         sourceGrid = levelToLoad.grid;
         sourceStart = levelToLoad.start;
@@ -4097,9 +4255,9 @@ function loadEditorGrid(index, mode) {
         sourceWidth = sourceGrid[0].length;
         sourceHeight = sourceGrid.length;
         editorState.isWaypointMode = levelToLoad.isWaypointMode || false;
-        editorState.waypoints = levelToLoad.waypoints ? JSON.parse(JSON.stringify(levelToLoad.waypoints)) : [];
-        editorState.freeWaypoints = levelToLoad.freeWaypoints ? JSON.parse(JSON.stringify(levelToLoad.freeWaypoints)) : [];
-        editorState.highlightFloors = levelToLoad.highlightFloors ? JSON.parse(JSON.stringify(levelToLoad.highlightFloors)) : [];
+        sourceWaypoints = levelToLoad.waypoints ? JSON.parse(JSON.stringify(levelToLoad.waypoints)) : [];
+        sourceFreeWaypoints = levelToLoad.freeWaypoints ? JSON.parse(JSON.stringify(levelToLoad.freeWaypoints)) : [];
+        sourceHighlightFloors = levelToLoad.highlightFloors ? JSON.parse(JSON.stringify(levelToLoad.highlightFloors)) : [];
         editorState.assetSizes = getLevelAssetSizes(levelToLoad);
     } else {
         sourceWidth = sourceHeight = EDITOR_SIZE;
@@ -4130,6 +4288,18 @@ function loadEditorGrid(index, mode) {
         }
         editorState.gridData.push(row);
     }
+
+    const translateToEditorGrid = (item) => ({
+        ...item,
+        x: item.x + xOffset,
+        z: item.z + zOffset
+    });
+    const isInsideEditorGrid = (item) => (
+        item.x >= 0 && item.x < EDITOR_SIZE && item.z >= 0 && item.z < EDITOR_SIZE
+    );
+    editorState.waypoints = sourceWaypoints.map(translateToEditorGrid).filter(isInsideEditorGrid);
+    editorState.freeWaypoints = sourceFreeWaypoints.map(translateToEditorGrid).filter(isInsideEditorGrid);
+    editorState.highlightFloors = sourceHighlightFloors.map(translateToEditorGrid).filter(isInsideEditorGrid);
     redrawEditorGrid();
 }
 
@@ -4235,10 +4405,43 @@ function showEditorMessage(text, isError = true) {
     setTimeout(() => { messageEl.textContent = ''; }, 2500);
 }
 
+function isEditorMapSolvable(gridData, start, goal) {
+    if (!start?.hasOwnProperty('x') || !goal?.hasOwnProperty('x')) return false;
+    const height = gridData.length;
+    const width = gridData[0]?.length || 0;
+    const queue = [{ x: start.x, z: start.z }];
+    const visited = new Set([`${start.x},${start.z}`]);
+
+    while (queue.length > 0) {
+        const current = queue.shift();
+        if (current.x === goal.x && current.z === goal.z) return true;
+
+        [
+            { x: current.x + 1, z: current.z },
+            { x: current.x - 1, z: current.z },
+            { x: current.x, z: current.z + 1 },
+            { x: current.x, z: current.z - 1 }
+        ].forEach((next) => {
+            const key = `${next.x},${next.z}`;
+            if (visited.has(key)) return;
+            if (next.x < 0 || next.x >= width || next.z < 0 || next.z >= height) return;
+            if (gridData[next.z][next.x] === 1) return;
+            visited.add(key);
+            queue.push(next);
+        });
+    }
+
+    return false;
+}
+
 function saveCustomMap() {
     const { start, goal, gridData, waypoints, freeWaypoints, highlightFloors } = editorState;
     if (!start.hasOwnProperty('x')) { showEditorMessage(translations[currentLanguage].editor_need_start); return; }
     if (!goal.hasOwnProperty('x')) { showEditorMessage(translations[currentLanguage].editor_need_goal); return; }
+    if (!isEditorMapSolvable(gridData, start, goal)) {
+        showEditorMessage(translations[currentLanguage].editor_unsolvable);
+        return;
+    }
     
     const mazeDataForSolver = gridData.map(row => row.map(cell => cell === 1 ? 0 : 1));
     
@@ -4255,19 +4458,25 @@ function saveCustomMap() {
         start: { ...start, dir: 'S' }, // Default dir
         goal: { ...goal },
         isWaypointMode: document.getElementById('editor-waypoint-mode-toggle').checked,
-        waypoints: waypoints,
+        waypoints: waypoints.map((wp) => ({ ...wp })),
         freeWaypoints: freeWaypoints.map((wp) => ({ ...wp, variant: getFreeWaypointVariantId(wp.variant) })),
-        highlightFloors: highlightFloors,
+        highlightFloors: highlightFloors.map((floor) => ({ ...floor })),
         assetSizes: getLevelAssetSizes({ assetSizes: editorState.assetSizes })
     };
     if (newLevel.start.x === 0) newLevel.start.dir = 'E'; else if (newLevel.start.x === EDITOR_SIZE - 1) newLevel.start.dir = 'W';
     else if (newLevel.start.z === 0) newLevel.start.dir = 'S'; else if (newLevel.start.z === EDITOR_SIZE - 1) newLevel.start.dir = 'N';
 
+    const previousLevel = customLevels[slotIndex];
     customLevels[slotIndex] = newLevel;
-    saveCustomLevels();
+    if (!saveCustomLevels()) {
+        customLevels[slotIndex] = previousLevel;
+        showEditorMessage(translations[currentLanguage].editor_storage_error);
+        return;
+    }
     
-    document.getElementById('editor-slot-select').options[slotIndex].textContent = `${translations[currentLanguage].map_slot} ${slotIndex + 1}`;
-    showEditorMessage(`${translations[currentLanguage].map_slot} ${slotIndex + 1} saved!`, false);
+    const savedSlotLabel = `${translations[currentLanguage].map_slot} ${slotIndex + 1}`;
+    document.getElementById('editor-slot-select').options[slotIndex].textContent = savedSlotLabel;
+    showEditorMessage(translations[currentLanguage].editor_saved(savedSlotLabel), false);
     if (currentEditorMode === 'builtin') {
         document.getElementById('editor-slot-select').value = slotIndex;
         document.getElementById('editor-mode-custom-btn').click();
@@ -4277,8 +4486,13 @@ function saveCustomMap() {
 function deleteCustomMap() {
     const slotIndex = parseInt(document.getElementById('editor-slot-select').value);
     if (customLevels[slotIndex] && confirm(translations[currentLanguage].confirm_delete)) {
+        const previousLevel = customLevels[slotIndex];
         customLevels[slotIndex] = null;
-        saveCustomLevels();
+        if (!saveCustomLevels()) {
+            customLevels[slotIndex] = previousLevel;
+            showEditorMessage(translations[currentLanguage].editor_storage_error);
+            return;
+        }
         initEditor(slotIndex);
     }
 }
@@ -4286,6 +4500,7 @@ function deleteCustomMap() {
 function showCustomMapsModal() {
     document.getElementById('main-menu-modal').style.display = 'none';
     document.getElementById('custom-maps-modal').style.display = 'flex';
+    document.getElementById('custom-maps-message').textContent = '';
     const grid = document.getElementById('custom-maps-grid');
     grid.innerHTML = '';
     selectedCustomMapIndex = -1;
@@ -4320,8 +4535,13 @@ function showCustomMapsModal() {
     document.getElementById('custom-edit-btn').onclick = () => { if(selectedCustomMapIndex !== -1) showEditor(selectedCustomMapIndex); };
     document.getElementById('custom-delete-btn').onclick = () => {
         if(selectedCustomMapIndex !== -1 && confirm(translations[currentLanguage].confirm_delete)) {
+            const previousLevel = customLevels[selectedCustomMapIndex];
             customLevels[selectedCustomMapIndex] = null;
-            saveCustomLevels();
+            if (!saveCustomLevels()) {
+                customLevels[selectedCustomMapIndex] = previousLevel;
+                document.getElementById('custom-maps-message').textContent = translations[currentLanguage].editor_storage_error;
+                return;
+            }
             showCustomMapsModal();
         }
     };
