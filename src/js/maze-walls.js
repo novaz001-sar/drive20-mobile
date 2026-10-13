@@ -1,28 +1,51 @@
 import * as THREE from 'three';
 
+const roofDefaults = new WeakMap();
+
+export function setMazeWallTopMaterial(group, topMaterial) {
+    group?.traverse(mesh => {
+        const defaults = roofDefaults.get(mesh);
+        if (!defaults) return;
+        mesh.geometry.clearGroups();
+        if (topMaterial?.map) {
+            mesh.material = topMaterial;
+            mesh.geometry.addGroup(0, mesh.geometry.getAttribute('position').count, 0);
+        } else {
+            mesh.material = defaults.materials;
+            defaults.groups.forEach(({ start, count, materialIndex }) => mesh.geometry.addGroup(start, count, materialIndex));
+        }
+        const uv = mesh.geometry.getAttribute('uv');
+        uv.array.set(topMaterial?.map ? defaults.uploadedUV : defaults.uv);
+        uv.needsUpdate = true;
+    });
+}
+
 // Grid value 0 is a wall; 1 is a walkable cell. Direction names follow
 // the existing corridor-facing materials, rather than the face normals.
 export function createSolidMazeWalls({ grid, goal, tileSize, wallHeight, materials }) {
     const width = grid[0].length;
     const depth = grid.length;
     const half = tileSize / 2;
-    const buckets = Array.from({ length: 5 }, () => ({ positions: [], normals: [], uvs: [] }));
+    const makeBuckets = () => Array.from({ length: 5 }, () => ({ positions: [], normals: [], uvs: [], uploadedUVs: [] }));
+    const buckets = makeBuckets();
+    const roofBuckets = makeBuckets();
     const wallMaterials = [materials.north, materials.south, materials.east, materials.west, materials.goal];
 
-    function addTriangle(materialIndex, points, normal, uvs) {
-        const bucket = buckets[materialIndex];
+    function addTriangle(targetBuckets, materialIndex, points, normal, uvs, uploadedUVs) {
+        const bucket = targetBuckets[materialIndex];
         points.forEach((point, index) => {
             bucket.positions.push(...point);
             bucket.normals.push(...normal);
             bucket.uvs.push(...uvs[index]);
+            if (uploadedUVs) bucket.uploadedUVs.push(...uploadedUVs[index]);
         });
     }
 
     function addQuad(materialIndex, points, normal) {
         // Keep uploaded textures oriented exactly as the former wall planes.
         const uvs = [[1, 1], [0, 1], [0, 0], [1, 0]];
-        addTriangle(materialIndex, [points[0], points[1], points[2]], normal, [uvs[0], uvs[1], uvs[2]]);
-        addTriangle(materialIndex, [points[0], points[2], points[3]], normal, [uvs[0], uvs[2], uvs[3]]);
+        addTriangle(buckets, materialIndex, [points[0], points[1], points[2]], normal, [uvs[0], uvs[1], uvs[2]]);
+        addTriangle(buckets, materialIndex, [points[0], points[2], points[3]], normal, [uvs[0], uvs[2], uvs[3]]);
     }
 
     function isWall(x, z) {
@@ -66,39 +89,54 @@ export function createSolidMazeWalls({ grid, goal, tileSize, wallHeight, materia
                 // Four filled roof sectors reuse the actual side materials.
                 // Their UVs meet the wall's upper edge and keep texture density
                 // in the depth direction, including after texture replacement.
-                addTriangle(materialIndex,
-                    [face.points[1], face.points[0], [centerX, top, centerZ]],
-                    [0, 1, 0], [[0, 1], [1, 1], [0.5, 1 + half / wallHeight]]);
+                const points = [face.points[1], face.points[0], [centerX, top, centerZ]];
+                addTriangle(roofBuckets, materialIndex, points,
+                    [0, 1, 0], [[0, 1], [1, 1], [0.5, 1 + half / wallHeight]],
+                    points.map(point => [(point[0] - left) / tileSize, (south - point[2]) / tileSize]));
             });
             addQuad(0, [[left, 0, south], [left, 0, north], [right, 0, north], [right, 0, south]], [0, -1, 0]);
         }
     }
 
-    const vertexCount = buckets.reduce((total, bucket) => total + bucket.positions.length / 3, 0);
-    const positions = new Float32Array(vertexCount * 3);
-    const normals = new Float32Array(vertexCount * 3);
-    const uvs = new Float32Array(vertexCount * 2);
-    const geometry = new THREE.BufferGeometry();
-    let vertexOffset = 0;
-    buckets.forEach((bucket, materialIndex) => {
-        if (bucket.positions.length === 0) return;
-        positions.set(bucket.positions, vertexOffset * 3);
-        normals.set(bucket.normals, vertexOffset * 3);
-        uvs.set(bucket.uvs, vertexOffset * 2);
-        const count = bucket.positions.length / 3;
-        geometry.addGroup(vertexOffset, count, materialIndex);
-        vertexOffset += count;
-    });
-    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-    geometry.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
-    geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
-    geometry.computeBoundingBox();
-    geometry.computeBoundingSphere();
+    function createGeometry(targetBuckets, hasUploadedUV = false) {
+        const vertexCount = targetBuckets.reduce((total, bucket) => total + bucket.positions.length / 3, 0);
+        const positions = new Float32Array(vertexCount * 3);
+        const normals = new Float32Array(vertexCount * 3);
+        const uvs = new Float32Array(vertexCount * 2);
+        const uploadedUVs = hasUploadedUV ? new Float32Array(vertexCount * 2) : null;
+        const geometry = new THREE.BufferGeometry();
+        let vertexOffset = 0;
+        targetBuckets.forEach((bucket, materialIndex) => {
+            if (bucket.positions.length === 0) return;
+            positions.set(bucket.positions, vertexOffset * 3);
+            normals.set(bucket.normals, vertexOffset * 3);
+            uvs.set(bucket.uvs, vertexOffset * 2);
+            uploadedUVs?.set(bucket.uploadedUVs, vertexOffset * 2);
+            const count = bucket.positions.length / 3;
+            geometry.addGroup(vertexOffset, count, materialIndex);
+            vertexOffset += count;
+        });
+        geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+        geometry.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
+        geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+        geometry.computeBoundingBox();
+        geometry.computeBoundingSphere();
+        return { geometry, uploadedUV: uploadedUVs };
+    }
 
-    // One draw call per material, irrespective of maze size.
-    const mesh = new THREE.Mesh(geometry, wallMaterials);
-    mesh.name = 'solid-maze-walls';
-    mesh.userData.solidMazeWalls = true;
-    mesh.userData.grid = grid;
-    return mesh;
+    // Batch sides and roofs separately so a custom roof never affects sides.
+    const body = new THREE.Mesh(createGeometry(buckets).geometry, wallMaterials);
+    body.name = 'maze-wall-sides';
+    const { geometry, uploadedUV } = createGeometry(roofBuckets, true);
+    const roof = new THREE.Mesh(geometry, wallMaterials);
+    roof.name = 'maze-wall-roofs';
+    roofDefaults.set(roof, { materials: wallMaterials, groups: geometry.groups.map(group => ({ ...group })),
+        uv: geometry.getAttribute('uv').array.slice(), uploadedUV });
+    const group = new THREE.Group();
+    group.name = 'solid-maze-walls';
+    group.userData.solidMazeWalls = true;
+    group.userData.grid = grid;
+    group.add(body, roof);
+    setMazeWallTopMaterial(group, materials.top);
+    return group;
 }

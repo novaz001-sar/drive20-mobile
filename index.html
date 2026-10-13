@@ -211,11 +211,16 @@
                     <input type="file" id="wall-w-texture-input" accept="image/*">
                     <span class="texture-preview" id="wall-w-texture-preview"></span>
                 </div>
+                <div class="texture-input-row">
+                    <label for="wall-top-texture-input" data-lang-zh="墙顶" data-lang-en="Wall Top">Wall Top</label>
+                    <input type="file" id="wall-top-texture-input" accept="image/*">
+                    <span class="texture-preview" id="wall-top-texture-preview"></span>
+                </div>
                 
                 <label for="floor-scale-slider" data-lang-zh="地面纹理大小" data-lang-en="Floor Texture Size">Floor Texture Size</label>
                 <input type="range" id="floor-scale-slider" min="1" max="10" step="1" value="1">
 
-                <label for="wall-scale-slider" data-lang-zh="墙面纹理大小" data-lang-en="Wall Texture Size">Wall Texture Size</label>
+                <label for="wall-scale-slider" data-lang-zh="墙面与墙顶纹理大小" data-lang-en="Wall and Wall Top Texture Size">Wall and Wall Top Texture Size</label>
                 <input type="range" id="wall-scale-slider" min="1" max="10" step="1" value="1">
                  <button id="reset-textures-btn" class="secondary" data-lang-zh="恢复默认纹理" data-lang-en="Reset Textures">Reset Textures</button>
             </div>
@@ -363,7 +368,7 @@
                     <h4 data-lang-zh="选择玩家形象" data-lang-en="Choose Player">Choose Player</h4>
                     <div class="vehicle-choice-grid" role="radiogroup" aria-label="Player avatar">
                         <button type="button" class="vehicle-choice-btn" data-player-vehicle="minimap-arrow" role="radio" aria-checked="false">
-                            <img class="vehicle-choice-preview" src="./src/assets/vehicle-thumbnails/minimap-arrow.svg" alt="" loading="eager" decoding="async">
+                            <img class="vehicle-choice-preview" src="./src/assets/vehicle-thumbnails/minimap-arrow.svg?v=20261013-bold-arrow-roof-v2" alt="" loading="eager" decoding="async">
                             <span data-lang-zh="立体箭头" data-lang-en="3D Arrow">3D Arrow</span>
                         </button>
                         <button type="button" class="vehicle-choice-btn active" data-player-vehicle="dragon-cart" role="radio" aria-checked="true">
@@ -412,6 +417,6 @@
             }
         }
     </script>
-    <script type="module" src="./src/js/main.js?v=20261013-solid-walls-arrow"></script>
+    <script type="module" src="./src/js/main.js?v=20261013-bold-arrow-roof-v2"></script>
 </body>
 </html>

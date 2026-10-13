@@ -1,14 +1,13 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 120">
   <defs>
     <radialGradient id="red"><stop stop-color="#ff8080"/><stop offset="1" stop-color="#c00000"/></radialGradient>
-    <linearGradient id="side" x2="0" y2="1"><stop stop-color="#c00000"/><stop offset="1" stop-color="#700b19"/></linearGradient>
   </defs>
-  <ellipse cx="80" cy="94" rx="50" ry="10" fill="#172936" opacity=".14"/>
-  <path d="M80 15 130 86 130 97 30 97 30 86Z" fill="url(#side)"/>
-  <path d="M30 86 130 86 130 97 30 97Z" fill="#006400"/>
-  <path d="M80 15 130 86 30 86Z" fill="url(#red)"/>
-  <path d="M80 15 30 86" stroke="#FFD700" stroke-width="8" stroke-linecap="round"/>
-  <path d="M80 15 130 86" stroke="#FFFFFF" stroke-width="8" stroke-linecap="round"/>
-  <path d="M30 86 130 86" stroke="#006400" stroke-width="7" stroke-linecap="round"/>
-  <path d="M80 36 80 66" stroke="#ffb6b6" stroke-width="3" stroke-linecap="round" opacity=".75"/>
+  <ellipse cx="80" cy="109" rx="39" ry="8" fill="#172936" opacity=".14"/>
+  <path d="M80 15 50 105 50 114 80 24Z" fill="#d9b600"/>
+  <path d="M80 15 110 105 110 114 80 24Z" fill="#d9d9d9"/>
+  <path d="M50 105 110 105 110 114 50 114Z" fill="#006400"/>
+  <path d="M80 15 110 105 50 105Z" fill="url(#red)"/>
+  <path d="M80 15 50 105 58.15 103.2 80 37.36Z" fill="#FFD700"/>
+  <path d="M80 15 110 105 101.85 103.2 80 37.36Z" fill="#FFFFFF"/>
+  <path d="M50 105 110 105 101.85 103.2 58.15 103.2Z" fill="#006400"/>
 </svg>

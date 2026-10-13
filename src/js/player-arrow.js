@@ -35,12 +35,28 @@ export function createPlayerArrowModel(THREE, tileSize) {
     const bottom = ring(0.94, bottomY);
     const lower = ring(1, lowerShoulderY);
     const upper = ring(1, upperShoulderY);
-    const top = ring(0.86, topY);
+    const top = ring(0.99, topY);
+
+    // Flat ribbons, rather than only a narrow sloping bevel, make the yellow
+    // left and white right edges readable from overhead and following views.
+    // Offset the two flank lines inwards by a constant perpendicular distance.
+    // The red inset retains over half of the full arrow's top footprint.
+    const flankRibbonWidth = size * 0.07;
+    const rearRibbonWidth = size * 0.014;
+    const bodyTipZ = top[0].z + Math.sqrt(10) * flankRibbonWidth;
+    const bodyRearZ = top[1].z - rearRibbonWidth;
+    const bodyHalfWidth = (bodyRearZ - bodyTipZ) / 3;
+    const bodyTop = [
+        new THREE.Vector3(0, topY, bodyTipZ),
+        new THREE.Vector3(-bodyHalfWidth, topY, bodyRearZ),
+        new THREE.Vector3(bodyHalfWidth, topY, bodyRearZ)
+    ];
 
     const redCenter = new THREE.Color(PLAYER_ARROW_PALETTE.bodyCenter);
     const redEdge = new THREE.Color(PLAYER_ARROW_PALETTE.bodyEdge);
     const white = new THREE.Color(0xffffff);
     const lowerShade = new THREE.Color(0xaaaaaa);
+    const sideShade = new THREE.Color(0xd9d9d9);
     const subdivisions = 12;
     const positions = [];
     const colors = [];
@@ -72,14 +88,15 @@ export function createPlayerArrowModel(THREE, tileSize) {
         }
     }
 
-    // Every perimeter edge joins the bottom, sidewall, bevel, and top face.
+    // Every perimeter edge joins the bottom, sidewall, bevel, ribbon, and body.
     // Unlike a plane or open extrusion, the arrow is solid from every view.
     const edgeMaterials = [1, 3, 2];
     outline.forEach((point, index) => {
         const materialIndex = edgeMaterials[index];
         edgeBand(bottom, lower, index, materialIndex, lowerShade);
-        edgeBand(lower, upper, index, materialIndex);
+        edgeBand(lower, upper, index, materialIndex, sideShade);
         edgeBand(upper, top, index, materialIndex);
+        edgeBand(top, bodyTop, index, materialIndex);
     });
     const bottomCenter = new THREE.Vector3(0, bottomY, 0);
     outline.forEach((point, index) => {
@@ -93,9 +110,9 @@ export function createPlayerArrowModel(THREE, tileSize) {
 
     // A small triangular tessellation keeps the red radial gradient smooth,
     // including the bright center used by the original minimap icon.
-    const surfacePoint = (i, j) => top[0].clone()
-        .addScaledVector(top[1].clone().sub(top[0]), i / subdivisions)
-        .addScaledVector(top[2].clone().sub(top[0]), j / subdivisions);
+    const surfacePoint = (i, j) => bodyTop[0].clone()
+        .addScaledVector(bodyTop[1].clone().sub(bodyTop[0]), i / subdivisions)
+        .addScaledVector(bodyTop[2].clone().sub(bodyTop[0]), j / subdivisions);
     const surfaceColor = point => redCenter.clone().lerp(
         redEdge,
         THREE.MathUtils.clamp(Math.hypot(point.x, point.z) / (size * 0.43), 0, 1)
@@ -126,13 +143,12 @@ export function createPlayerArrowModel(THREE, tileSize) {
         roughness: 0.33,
         metalness: 0.18
     });
-    const edgeMaterial = color => new THREE.MeshStandardMaterial({
+    // Keep the navigational flank colors stable in both day and night scenes.
+    // Lower vertex shading still gives the closed sidewalls visible depth.
+    const edgeMaterial = color => new THREE.MeshBasicMaterial({
         color,
-        emissive: color,
-        emissiveIntensity: 0.2,
         vertexColors: true,
-        roughness: 0.25,
-        metalness: 0.3
+        toneMapped: false
     });
     const mesh = new THREE.Mesh(geometry, [
         bodyMaterial,
