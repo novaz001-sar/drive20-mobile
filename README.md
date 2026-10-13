@@ -12,6 +12,8 @@ https://novaz001-sar.github.io/drive20-mobile/
 - Built-in Chinese and English interfaces with a remembered language choice.
 - Large touch targets and readable interface text for tablet and phone users.
 - First-person and third-person camera modes, including adjustable third-person controls.
+- Solid maze walls with textured tops in both camera modes.
+- A selectable beveled 3D arrow avatar matching the minimap's red body, yellow left edge, white right edge, and green rear edge.
 - Minimap options for fixed and rotating views.
 - Custom map editor with walls, paths, start/goal cells, numbered waypoints, free waypoints, highlight floors, and asset size controls.
 - Optimized 3D assets for vehicles, goal characters, and free waypoint figures.

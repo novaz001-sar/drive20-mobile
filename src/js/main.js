@@ -6,6 +6,9 @@ import { TextGeometry } from 'three/addons/geometries/TextGeometry.js';
 import { TILE_SIZE, WALL_HEIGHT, MOVE_SPEED, TURN_SPEED, LUCKY_CAT } from './constants.js';
 import { translations } from './i18n.js';
 import { levels } from './levels.js';
+import { createSolidMazeWalls } from './maze-walls.js';
+import { createThirdPersonCameraController } from './third-person-camera.js';
+import { PLAYER_ARROW_PALETTE, createPlayerArrowModel } from './player-arrow.js';
 
 // ====================================================================
 // Global variables and state machine
@@ -50,6 +53,7 @@ let thirdPersonControls = {
     cameraMode: 'follow',
     panelExpanded: !(window.matchMedia('(pointer: coarse)').matches || window.innerWidth <= 900)
 };
+const updateCameraPosition = createThirdPersonCameraController({ tileSize: TILE_SIZE, wallHeight: WALL_HEIGHT });
 
 let currentLevelState = {
     playerChoices: 0,
@@ -155,6 +159,11 @@ const ORANGE_DRAGON_GOAL_FLOOR_CLEARANCE = 0.08;
 const PLAYER_VEHICLE_DEFAULT_ID = 'dragon-cart';
 const PLAYER_VEHICLE_STORAGE_KEY = 'drive_player_vehicle_v1';
 const PLAYER_VEHICLE_ASSETS = Object.freeze({
+    'minimap-arrow': {
+        id: 'minimap-arrow',
+        wrapperName: 'playerMinimapArrowAsset',
+        procedural: true
+    },
     'dragon-cart': {
         id: 'dragon-cart',
         url: './src/assets/models/optimized/player-dragon-cart.glb?v=20260625-model-fix',
@@ -293,6 +302,14 @@ function refreshPlayerVehicleModel() {
     if (!player) return;
     if (playerCarModel) {
         player.remove(playerCarModel);
+        if (playerCarModel.userData.vehicleId === 'minimap-arrow') {
+            playerCarModel.traverse(child => {
+                if (!child.isMesh) return;
+                child.geometry.dispose();
+                const materials = Array.isArray(child.material) ? child.material : [child.material];
+                materials.forEach(material => material.dispose());
+            });
+        }
         playerCarModel = null;
     }
     playerCarModel = createPlayerVehicleAsset(selectedPlayerVehicleId);
@@ -596,29 +613,10 @@ function setViewMode(mode) {
 // NEW: Function to update 3P camera based on controls
 function updateThirdPersonCamera() {
     if (viewMode !== '3P') return;
-
-    const zoom = thirdPersonControls.zoom; // This is a multiplier for TILE_SIZE
-    const angleDeg = thirdPersonControls.angle; // This is the downward angle in degrees
-
-    const distance = TILE_SIZE * zoom;
-    const angleRad = THREE.MathUtils.degToRad(angleDeg);
-
-    const camX = 0;
-    const camY = distance * Math.sin(angleRad); // Height
-    const camZ = distance * Math.cos(angleRad); // How far back
-
-    if (thirdPersonControls.cameraMode === 'overhead') {
-        if (camera.parent !== scene) scene.add(camera);
-        camera.position.set(player.position.x + camX, player.position.y + camY, player.position.z + camZ);
-        camera.lookAt(player.position.x, player.position.y + WALL_HEIGHT * 0.2, player.position.z);
-        return;
-    }
-
-    if (camera.parent !== player) player.add(camera);
-    camera.position.set(camX, camY, camZ);
-    camera.rotation.x = -angleRad;
-    camera.rotation.y = 0;
-    camera.rotation.z = 0;
+    updateCameraPosition({ camera, player, scene, model: playerCarModel,
+        grid: mazeGroup?.getObjectByName('solid-maze-walls')?.userData.grid,
+        zoom: thirdPersonControls.zoom, angle: thirdPersonControls.angle,
+        cameraMode: thirdPersonControls.cameraMode });
 }
 
 function startDrivingFromBigMap() {
@@ -1362,7 +1360,11 @@ function showMainMenu() {
     document.getElementById('main-menu-info-box').innerHTML = '';
     
     [mazeGroup, landmarksGroup, sceneryGroup, waypointsGroup, highlightFloorsGroup].forEach(group => {
-        while(group.children.length > 0){ group.remove(group.children[0]); }
+        while (group.children.length > 0) {
+            const child = group.children[0];
+            if (child.userData.solidMazeWalls) child.geometry.dispose();
+            group.remove(child);
+        }
     });
     activeLampLights = [];
     activeTechWallEffects = [];
@@ -1419,7 +1421,11 @@ function loadLevel(levelData) {
 
     // Reset groups
     [mazeGroup, landmarksGroup, sceneryGroup, waypointsGroup, highlightFloorsGroup].forEach(group => {
-        while(group.children.length > 0){ group.remove(group.children[0]); }
+        while (group.children.length > 0) {
+            const child = group.children[0];
+            if (child.userData.solidMazeWalls) child.geometry.dispose();
+            group.remove(child);
+        }
     });
     activeLampLights = [];
     activeTechWallEffects = [];
@@ -2075,7 +2081,7 @@ function animate() {
         starField.material.opacity = Math.min(1.0, Math.pow(nightFactor, 0.6) * 1.2);
     }
 
-    if (viewMode === '3P' && thirdPersonControls.cameraMode === 'overhead') {
+    if (viewMode === '3P') {
         updateThirdPersonCamera();
     }
 
@@ -2128,22 +2134,6 @@ function onKeyUp(event) {
 // ====================================================================
 // 3D maze and visual generation
 // ====================================================================
-
-function createInstancedWallBatch(geometry, material, transforms) {
-    if (transforms.length === 0) return;
-    const batch = new THREE.InstancedMesh(geometry, material, transforms.length);
-    batch.instanceMatrix.setUsage(THREE.StaticDrawUsage);
-    const dummy = new THREE.Object3D();
-    transforms.forEach((transform, index) => {
-        dummy.position.set(transform.x, WALL_HEIGHT / 2, transform.z);
-        dummy.rotation.set(0, transform.rotationY, 0);
-        dummy.updateMatrix();
-        batch.setMatrixAt(index, dummy.matrix);
-    });
-    batch.instanceMatrix.needsUpdate = true;
-    batch.frustumCulled = false;
-    mazeGroup.add(batch);
-}
 
 function createTechWallEffect(transform, index, usePointLight) {
     const group = new THREE.Group();
@@ -2292,7 +2282,22 @@ function createMazeMesh(grid, goal) {
     floorMaterial.userData.baseRepeat = { x: gridWidth, y: gridHeight };
     updateTextureScales();
 
-    const wallGeo = new THREE.PlaneGeometry(TILE_SIZE, WALL_HEIGHT);
+    mazeGroup.add(createSolidMazeWalls({
+        grid,
+        goal,
+        tileSize: TILE_SIZE,
+        wallHeight: WALL_HEIGHT,
+        materials: {
+            north: wallMaterialN,
+            south: wallMaterialS,
+            east: wallMaterialE,
+            west: wallMaterialW,
+            goal: goalWallMaterial
+        }
+    }));
+
+    // Keep the corridor-facing positions for the existing decorative lighting.
+    // The wall mass itself is batched with closed tops and outer side faces.
     const wallBatches = {
         north: [],
         south: [],
@@ -2330,11 +2335,6 @@ function createMazeMesh(grid, goal) {
         }
     }
 
-    createInstancedWallBatch(wallGeo, wallMaterialN, wallBatches.north);
-    createInstancedWallBatch(wallGeo, wallMaterialS, wallBatches.south);
-    createInstancedWallBatch(wallGeo, wallMaterialE, wallBatches.east);
-    createInstancedWallBatch(wallGeo, wallMaterialW, wallBatches.west);
-    createInstancedWallBatch(wallGeo, goalWallMaterial, wallBatches.goal);
     addTechWallLighting(wallBatches, gridWidth, gridHeight);
 }
 
@@ -2594,6 +2594,12 @@ function createPlayerVehiclePlaceholder(config) {
 
 function createPlayerVehicleAsset(vehicleId = selectedPlayerVehicleId) {
     const config = getPlayerVehicleConfig(vehicleId);
+    if (config.procedural) {
+        const arrow = createPlayerArrowModel(THREE, TILE_SIZE);
+        arrow.userData.vehicleId = config.id;
+        arrow.scale.setScalar(thirdPersonControls.carScale);
+        return arrow;
+    }
     const wrapper = new THREE.Group();
     wrapper.name = config.wrapperName;
     wrapper.userData.vehicleId = config.id;
@@ -3721,8 +3727,8 @@ function drawMinimapPlayerArrow(ctx, playerX, playerZ, rotationRad, cellWidth, c
 
     const size = Math.min(cellWidth, cellHeight) * 1.2;
     const grad = ctx.createRadialGradient(0,0,0,0,0,size*0.5);
-    grad.addColorStop(0, '#ff8080');
-    grad.addColorStop(1, '#c00000');
+    grad.addColorStop(0, PLAYER_ARROW_PALETTE.bodyCenter);
+    grad.addColorStop(1, PLAYER_ARROW_PALETTE.bodyEdge);
 
     // Triangle points to +X by default
     ctx.beginPath();
@@ -3733,7 +3739,7 @@ function drawMinimapPlayerArrow(ctx, playerX, playerZ, rotationRad, cellWidth, c
 
     // Fill
     ctx.fillStyle = grad;
-    ctx.shadowColor = 'rgba(255,0,0,0.9)';
+    ctx.shadowColor = PLAYER_ARROW_PALETTE.glow;
     ctx.shadowBlur = size*0.7;
     ctx.fill();
 
@@ -3751,21 +3757,21 @@ function drawMinimapPlayerArrow(ctx, playerX, playerZ, rotationRad, cellWidth, c
     ctx.beginPath();
     ctx.moveTo(bx, by);
     ctx.lineTo(cx, cy);
-    ctx.strokeStyle = '#006400';
+    ctx.strokeStyle = PLAYER_ARROW_PALETTE.rear;
     ctx.stroke();
 
     // Side edge (A->B): yellow
     ctx.beginPath();
     ctx.moveTo(ax, ay);
     ctx.lineTo(bx, by);
-    ctx.strokeStyle = '#FFD700';
+    ctx.strokeStyle = PLAYER_ARROW_PALETTE.left;
     ctx.stroke();
 
     // Side edge (A->C): white
     ctx.beginPath();
     ctx.moveTo(ax, ay);
     ctx.lineTo(cx, cy);
-    ctx.strokeStyle = '#FFFFFF';
+    ctx.strokeStyle = PLAYER_ARROW_PALETTE.right;
     ctx.stroke();
 
     ctx.restore();
